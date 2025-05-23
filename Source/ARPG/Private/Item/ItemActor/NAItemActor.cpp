@@ -23,7 +23,6 @@ void ANAItemActor::PostRegisterAllComponents()
 
 	if (HasAnyFlags(RF_ClassDefaultObject)) { return; }
 	
-	//InitItemData_Internal();
 }
 
 void ANAItemActor::InitItemData_Internal()
@@ -48,8 +47,6 @@ void ANAItemActor::PostInitializeComponents()
 	Super::PostInitializeComponents();
 	
 	if (HasAnyFlags(RF_ClassDefaultObject)) { return; }
-	
-	VerifyInteractableData_Internal();
 }
 
 void ANAItemActor::VerifyInteractableData_Internal()
@@ -57,7 +54,10 @@ void ANAItemActor::VerifyInteractableData_Internal()
 	// 이 액터가 UNAInteractableInterface 인터페이스를 구현했다면 this를 할당
 	if (bIsItemDataInitialized && GetClass()->ImplementsInterface(UNAInteractableInterface::StaticClass()))
 	{
-		InteractableInterfaceRef = this;
+		if (!InteractableInterfaceRef)
+		{
+			InteractableInterfaceRef = this;
+		}
 		
 		if (!CheckInteractableEdit(InteractableInterfaceRef.GetInterface()->Execute_GetInteractableData(this)))
 		{
@@ -87,37 +87,42 @@ void ANAItemActor::OnConstruction(const FTransform& Transform)
 
 	if (HasAnyFlags(RF_ClassDefaultObject)) { return; }
 	
-	if (!bIsItemDataInitialized)
+	if (!ItemData.IsValid())
 	{
 		InitItemData_Internal();
 		//ensureAlwaysMsgf(bIsItemDataInitialized, TEXT("[ANAItemActor::OnConstruction]  아직까지도 Item Data가 초기화되지 않았다고 어째서야"));
 		//return;
-	}
-
-	if (!bWTF)
-	{
 		InitItemActor_Internal();
 	}
+
+	// if (!bWTF)
+	// {
+	// 	
+	// }
 }
 
 void ANAItemActor::InitItemActor_Internal()
 {
-	if (!bIsItemDataInitialized || ItemData->ItemMetaDataHandle.IsNull())
-	{
-		//ensureAlwaysMsgf(false, TEXT("[ANAItemActor::InitItemActor_Internal]  InDataTableRowHandle이 Null이었음. Item Instance 초기화 실패"));
-		//return;
-		InitItemData_Internal();
-	}
-	if (bIsItemDataInitialized)
+	// if (!bIsItemDataInitialized || ItemData->ItemMetaDataHandle.IsNull())
+	// {
+	// 	//ensureAlwaysMsgf(false, TEXT("[ANAItemActor::InitItemActor_Internal]  InDataTableRowHandle이 Null이었음. Item Instance 초기화 실패"));
+	// 	//return;
+	// 	InitItemData_Internal();
+	// }
+	// if (bIsItemDataInitialized)
+	if (ItemData.IsValid())
 	{
 		InitItemActor_Impl();
-	}
-	if (bWTF)
-	{
 		OnItemActorInitialized();
 	}
-	//OnItemActorInitializedDelegate.Broadcast(this);
+	
 }
+
+void ANAItemActor::OnItemActorInitialized_Implementation()
+{
+	VerifyInteractableData_Internal();
+}
+
 
 void ANAItemActor::InitItemActor_Impl()
 {
@@ -201,7 +206,7 @@ void ANAItemActor::InitItemActor_Impl()
 		}
 	}
 
-	if (!ItemMesh)
+	if (RootComponent && !ItemMesh)
 	{
 		UStaticMeshComponent* NewStaticMeshComp = nullptr;
 		USkeletalMeshComponent* NewSkeletalMeshComp = nullptr;

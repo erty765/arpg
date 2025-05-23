@@ -79,7 +79,7 @@ protected:
 
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent)
 	void OnItemActorInitialized();
-	virtual void OnItemActorInitialized_Implementation() {}
+	virtual void OnItemActorInitialized_Implementation();
 	
 	virtual void BeginPlay() override;
 
@@ -180,10 +180,9 @@ inline bool ANAItemActor::CreateItemDataIfUnset() noexcept
 {
 	if (ItemData.IsExplicitlyNull())
 	{
-		if (TWeakObjectPtr<UNAItemData> NewItemData = FItemManagerStatics::Get(GetWorld()).CreateItemDataByActor/*ItemDTRow_T>*/(this);
-			NewItemData.IsValid())
+		if (TWeakObjectPtr<UNAItemData> NewItemData = FItemManagerStatics::Get(GetWorld()).CreateItemDataByActor(this);NewItemData.IsValid())
 		{
-			ItemData = NewItemData;
+			ItemData = NewItemData.Get();
 			return true;
 		}
 	} // sh1t

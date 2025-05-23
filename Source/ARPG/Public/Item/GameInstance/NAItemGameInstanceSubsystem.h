@@ -9,6 +9,7 @@
 
 class ANAItemActor;
 struct FNAInventorySlot;
+class UNAItemGameInstanceSubsystem;
 
 USTRUCT(BlueprintType)
 struct FItemManagerImpl
@@ -37,11 +38,14 @@ public:
 
 	FORCEINLINE bool IsInitialized() const { return bIsMetaMapInitialized; }
 
+	static UNAItemGameInstanceSubsystem* GetItemSubsystem(UWorld* InWorld);
+	
 protected:
 	void UpdateRuntimeItemDataMap(FName InItemDataID, const UNAItemData* InItemData) const;
 	
 	static void ValidateItemRow(const FNAItemBaseTableRow* RowPtr, const FName RowName);
 
+	static UNAItemData* TryCreateItemData(UWorld* OuterHandle);
 public:
 	template<typename ItemDTR_T>
 		requires TIsDerivedFrom<ItemDTR_T, FNAItemBaseTableRow>::IsDerived
@@ -92,9 +96,10 @@ public:
 			//	ensureAlwaysMsgf(false, TEXT("[UNAItemGameInstanceSubsystem::CreateItemDataByActor]  ItemMetaDataMap[%s]의 값이 유효하지 않음."), *InItemActorClass->GetName());
 			//	return nullptr;
 			//}
-
+			
 			// 3) UNAItemData 객체 생성 및 초기화
-			UNAItemData* NewItemData = NewObject<UNAItemData>( InItemActor->GetWorld(), NAME_None, RF_Transient );
+			UNAItemData* NewItemData = TryCreateItemData(InItemActor->GetWorld());;
+			
 			if (!NewItemData)
 			{
 				ensureAlwaysMsgf(false, TEXT("[UNAItemGameInstanceSubsystem::CreateItemDataByActor]  새로운 UNAItemData 객체 생성 실패"));

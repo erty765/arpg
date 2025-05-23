@@ -6,66 +6,71 @@
 #include "Item/ItemActor/NAItemActor.h"
 #include "Inventory/DataStructs/NAInventoryDataStructs.h"
 #include "Item/ItemDataStructs/NAItemBaseDataStructs.h"
+#include "Item/NAItemEngineSubsystem.h"
 
 void FItemManagerImpl::Initialize()
 {
-	// 1) Registry 에셋 동기 로드 (나중에 실제 경로로 교체)
-	static const FString RegistryPath = TEXT("/Script/ARPG.ItemDataTablesAsset'/Game/00_ProjectNA/ItemTest/DA_ItemDataTables.DA_ItemDataTables'");
-	UItemDataTablesAsset* Registry = Cast<UItemDataTablesAsset>(StaticLoadObject(UItemDataTablesAsset::StaticClass(), nullptr, *RegistryPath));
-
-	if (!Registry)
+	if (ItemDataTableSources.IsEmpty())
 	{
-		UE_LOG(LogTemp, Error, TEXT("[UNAItemGameInstanceSubsystem::Initialize]  ItemDataTablesAsset 로드 실패: %s"), *RegistryPath);
-		return;
-	}
+		// 1) Registry 에셋 동기 로드 (나중에 실제 경로로 교체)
+		static const FString RegistryPath = TEXT("/Script/ARPG.ItemDataTablesAsset'/Game/00_ProjectNA/ItemTest/DA_ItemDataTables.DA_ItemDataTables'");
+		UItemDataTablesAsset* Registry = Cast<UItemDataTablesAsset>(StaticLoadObject(UItemDataTablesAsset::StaticClass(), nullptr, *RegistryPath));
 
-	// 2) Registry 안의 SoftObjectPtr<UDataTable> 리스트 순회
-	for (const TSoftObjectPtr<UDataTable>& SoftDT : Registry->ItemDataTables)
-	{
-		UDataTable* DT = SoftDT.LoadSynchronous();
-		if (!DT)
+		if (!Registry)
 		{
-			UE_LOG(LogTemp, Warning,
-				TEXT("[UNAItemGameInstanceSubsystem]  Failed to load DataTable: %s"), *SoftDT.ToString());
-			continue;
+			UE_LOG(LogTemp, Error, TEXT("[UNAItemGameInstanceSubsystem::Initialize]  ItemDataTablesAsset 로드 실패: %s"), *RegistryPath);
+			return;
 		}
 
-		ItemDataTableSources.Emplace(DT);
-		UE_LOG(LogTemp, Log,
-			TEXT("[UNAItemGameInstanceSubsystem]  Loaded DataTable: %s"), *DT->GetName());
-	}
-
-	// (2) 메타데이터 맵 빌드
-	ItemMetaDataMap.Empty();
-
-	// ItemMetaDataMap 버킷 확보
-	int32 ExpectedCount = 0;
-	for (UDataTable* DT : ItemDataTableSources)
-	{
-		ExpectedCount += DT->GetRowMap().Num();
-	}
-	ItemMetaDataMap.Reserve(ExpectedCount);
-	
-	for (UDataTable* DT : ItemDataTableSources)
-	{
-		for (const TPair<FName, uint8*>& Pair : DT->GetRowMap())
+		// 2) Registry 안의 SoftObjectPtr<UDataTable> 리스트 순회
+		for (const TSoftObjectPtr<UDataTable>& SoftDT : Registry->ItemDataTables)
 		{
-			FName  RowName = Pair.Key;
-			FNAItemBaseTableRow* Row = DT->FindRow<FNAItemBaseTableRow>(RowName, TEXT("Mapping item meta data"));
-			if (Row && Row->ItemClass)
+			UDataTable* DT = SoftDT.LoadSynchronous();
+			if (!DT)
 			{
-				ValidateItemRow(Row, RowName);
+				UE_LOG(LogTemp, Warning,
+					TEXT("[UNAItemGameInstanceSubsystem]  Failed to load DataTable: %s"), *SoftDT.ToString());
+				continue;
+			}
+
+			ItemDataTableSources.Emplace(DT);
+			UE_LOG(LogTemp, Log,
+				TEXT("[UNAItemGameInstanceSubsystem]  Loaded DataTable: %s"), *DT->GetName());
+		}
+
+		// (2) 메타데이터 맵 빌드
+		if (ItemMetaDataMap.IsEmpty())
+		{
+			// ItemMetaDataMap 버킷 확보
+			int32 ExpectedCount = 0;
+			for (UDataTable* DT : ItemDataTableSources)
+			{
+				ExpectedCount += DT->GetRowMap().Num();
+			}
+			ItemMetaDataMap.Reserve(ExpectedCount);
+	
+			for (UDataTable* DT : ItemDataTableSources)
+			{
+				for (const TPair<FName, uint8*>& Pair : DT->GetRowMap())
+				{
+					FName  RowName = Pair.Key;
+					FNAItemBaseTableRow* Row = DT->FindRow<FNAItemBaseTableRow>(RowName, TEXT("Mapping item meta data"));
+					if (Row && Row->ItemClass)
+					{
+						ValidateItemRow(Row, RowName);
 				
-				FDataTableRowHandle Handle;
-				Handle.DataTable = DT;
-				Handle.RowName = RowName;
-				ItemMetaDataMap.Emplace(Row->ItemClass, Handle);
+						FDataTableRowHandle Handle;
+						Handle.DataTable = DT;
+						Handle.RowName = RowName;
+						ItemMetaDataMap.Emplace(Row->ItemClass, Handle);
+					}
+				}
+			}
+
+			if (!ItemMetaDataMap.IsEmpty()) {
+				bIsMetaMapInitialized = true;
 			}
 		}
-	}
-
-	if (!ItemMetaDataMap.IsEmpty()) {
-		bIsMetaMapInitialized = true;
 	}
 
 	// 블루프린트 (아이템) - 매시 지정, 아이템 효과 지정, 기타 등등 -> (Item 클래스)
@@ -115,6 +120,39 @@ void FItemManagerImpl::ValidateItemRow( const FNAItemBaseTableRow* RowPtr, const
 			   TEXT("DataTable(%s): 오류! MaxInventoryStackSize(%d)이 0보다 큰데, MaxSlotStackSize(%d)이 0 이었음"),
 			   *RowName.ToString(), Slot, Inv);
 	}
+}
+
+UNAItemData* FItemManagerImpl::TryCreateItemData(UWorld* OuterHandle)
+{
+	UNAItemData* NewItemData = nullptr;
+	if (OuterHandle && GEngine)
+	{
+		if (UNAItemEngineSubsystem* ItemEngineSubsys = GEngine->GetEngineSubsystem<UNAItemEngineSubsystem>())
+		if (OuterHandle->IsEditorWorld() || OuterHandle->WorldType == EWorldType::Inactive)
+		{
+			NewItemData = NewObject<UNAItemData>(ItemEngineSubsys, NAME_None, RF_DuplicateTransient);
+		}
+		else
+		{
+			NewItemData = NewObject<UNAItemData>(FItemManagerImpl::GetItemSubsystem(OuterHandle), NAME_None, RF_DuplicateTransient);
+		}
+	}
+	return NewItemData;
+}
+
+UNAItemGameInstanceSubsystem* FItemManagerImpl::GetItemSubsystem(UWorld* InWorld)
+{
+	UNAItemGameInstanceSubsystem* ItemGameSubsys = nullptr;
+	
+	if (InWorld)
+	{
+		if (UGameInstance* GI = InWorld->GetGameInstance())
+		{
+			ItemGameSubsys = GI->GetSubsystem<UNAItemGameInstanceSubsystem>();
+		}
+	}
+
+	return ItemGameSubsys;
 }
 
 UNAItemData* FItemManagerImpl::CreateItemDataBySlot( UWorld* InWorld, const FNAInventorySlot& InInventorySlot )
