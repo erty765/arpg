@@ -77,7 +77,7 @@ protected:
 	//UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Interaction Component")
 	//FNAInteractionData InteractionData;
 
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Interaction Component")
+	UPROPERTY(Transient, DuplicateTransient, VisibleInstanceOnly, BlueprintReadOnly, Category = "Interaction Component")
 	TMap<FWeakInteractableHandle, FNAInteractionData> FocusedInteractableMap;
 	//TMap<TWeakInterfacePtr<class INAInteractableInterface>, FNAInteractionData> FocusedInteractableMap;
 
@@ -91,12 +91,12 @@ protected:
 
 private:
 	// 상호작용이 활성된 Interactable 객체
-	UPROPERTY(/*VisibleInstanceOnly, BlueprintReadOnly, Category = "Interaction Component"*/)
+	UPROPERTY(Transient, DuplicateTransient)
 	FWeakInteractableHandle ActiveInteractable = nullptr;
 	//TWeakInterfacePtr<INAInteractableInterface> ActiveInteractable = nullptr;
 
 	// 가장 가까이 있는 Interactable 객체
-	UPROPERTY(/*VisibleInstanceOnly, BlueprintReadOnly, Category = "Interaction Component"*/)
+	UPROPERTY(Transient, DuplicateTransient)
 	FWeakInteractableHandle NearestInteractable = nullptr;
 	//TWeakInterfacePtr<INAInteractableInterface> NearestInteractable = nullptr;
 
@@ -110,7 +110,7 @@ public:
 	bool OnInteractableFound(INAInteractableInterface* InteractableActor);
 	// @TODO: FocusedInteractableMap 요소 지연 삭제 고민해보기 -> 상호작용 아이템 포커스 갱신 때문에 병목 생기는지 확인하기
 	bool OnInteractableLost(INAInteractableInterface* InteractableActor);
-
+	
 	void BeginInteraction(/*INAInteractableInterface* InteractableActor*/);
 	void EndInteraction(/*INAInteractableInterface* InteractableActor*/);
 	void ExecuteInteraction(/*INAInteractableInterface* InteractableActor*/);

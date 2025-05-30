@@ -69,8 +69,20 @@ class ANACharacter : public ACharacter, public IAbilitySystemInterface, public I
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<class UNAInteractionComponent> InteractionComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction", meta=(AllowPrivateAccess="true"))
+	/* Interaction Action */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+	UInputAction* InteractionAction;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<class UNAInventoryComponent> InventoryComponent;
+
+	/* Inventory Action */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+	UInputAction* InventoryAction ;
+
+	/* Inventory IMC */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+	UInputMappingContext* InventoryMappingContext;
 
 	// 양손에 무기가 없을때 사용되는 전투 컴포넌트
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Replicated, Category = "Combat", meta=(AllowPrivateAccess="true"))
@@ -99,6 +111,14 @@ protected:
 	// 오른 클릭으로 공격을 시작할 경우
 	UFUNCTION()
 	void StopLeftMouseAttack();
+
+	// Interaction Input
+	UFUNCTION()
+	void TryInteract();
+
+	// Inventory Input
+	UFUNCTION()
+	void ToggleInventoryWidget();
 	
 protected:
 	// APawn interface

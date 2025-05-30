@@ -187,6 +187,7 @@ void ANACharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
 		{
 			Subsystem->AddMappingContext(DefaultMappingContext, 0);
+			Subsystem->AddMappingContext(InventoryMappingContext, 1);
 		}
 	}
 	
@@ -205,6 +206,11 @@ void ANACharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 
 		EnhancedInputComponent->BindAction(LeftMouseAttackAction, ETriggerEvent::Started, this, &ANACharacter::StartLeftMouseAttack);
 		EnhancedInputComponent->BindAction(LeftMouseAttackAction, ETriggerEvent::Completed, this, &ANACharacter::StopLeftMouseAttack);
+
+		// Interact
+		EnhancedInputComponent->BindAction(InteractionAction, ETriggerEvent::Started, this, &ANACharacter::TryInteract);
+		// Inventory
+		EnhancedInputComponent->BindAction(InventoryAction, ETriggerEvent::Started, this, &ANACharacter::ToggleInventoryWidget);
 	}
 	else
 	{
@@ -314,6 +320,29 @@ void ANACharacter::StopLeftMouseAttack()
 		if ( DefaultCombatComponent->IsAttacking() )
 		{
 			DefaultCombatComponent->StopAttack();	
+		}
+	}
+}
+
+void ANACharacter::TryInteract()
+{
+	if (ensure(InteractionComponent != nullptr))
+	{
+		InteractionComponent->BeginInteraction();
+	}
+}
+
+void ANACharacter::ToggleInventoryWidget()
+{
+	if (ensure(InventoryComponent != nullptr))
+	{
+		if (InventoryComponent->IsInventoryWidgetReleased())
+		{
+			InventoryComponent->CollapseInventoryWidget();
+		}
+		else
+		{
+			InventoryComponent->ReleaseInventoryWidget();
 		}
 	}
 }
