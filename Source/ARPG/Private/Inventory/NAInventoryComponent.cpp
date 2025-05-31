@@ -41,7 +41,7 @@ void UNAInventoryComponent::BeginPlay()
 	Super::BeginPlay();
 
 	// ...
-	
+	SetVisibility(false);
 }
 
 FItemAddResult UNAInventoryComponent::HandleNonStackableItems(UNAItemData* InItem, int32 RequestedAddAmount)
@@ -119,5 +119,25 @@ int32 UNAInventoryComponent::HandleRemoveAmountOfItemActors(UNAItemData* InItem,
 
 void UNAInventoryComponent::SplitExistingStack(UNAItemData* InItem, const int32 AmountToSplit)
 {
+}
+
+void UNAInventoryComponent::ReleaseInventoryWidget()
+{
+	if (UUserWidget* InventoryWidget = GetWidget())
+	{
+		SetVisibility(true);
+		SetWindowVisibility(EWindowVisibility::Visible);
+		InventoryWidget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	}
+}
+
+void UNAInventoryComponent::CollapseInventoryWidget()
+{
+	if (UUserWidget* InventoryWidget = GetWidget())
+	{
+		SetVisibility(false);
+		SetWindowVisibility(EWindowVisibility::SelfHitTestInvisible);
+		InventoryWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }
 

@@ -31,7 +31,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Interactable Interface")
 	FNAInteractableData GetInteractableData() const;
-	virtual const FNAInteractableData& GetInteractableData_Internal() const =0;
+	virtual bool GetInteractableData_Internal(FNAInteractableData& OutInteractableData) const =0;
 	
 
 	// @TODO: 아이템 메타데이터를 non const로 받아와서 InteractableData에 직접 대입함. 아이템 메타 데이터의 무결성을 침해할 우려가 있음

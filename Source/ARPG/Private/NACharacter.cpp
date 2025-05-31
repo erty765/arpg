@@ -104,8 +104,16 @@ ANACharacter::ANACharacter()
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	DefaultCombatComponent = CreateDefaultSubobject<UNAMontageCombatComponent>( TEXT( "DefaultCombatComponent" ) );
 	InteractionComponent = CreateDefaultSubobject<UNAInteractionComponent>(TEXT("InteractionComponent"));
+	InventoryWidgetBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("InventorySpringArm"));
+	InventoryWidgetBoom->SetupAttachment(RootComponent);
+	InventoryWidgetBoom-> bUsePawnControlRotation = false;
+	InventoryWidgetBoom-> bInheritPitch = false;
+	InventoryWidgetBoom-> bInheritYaw = false;
+	InventoryWidgetBoom-> bInheritRoll = false;
 	InventoryComponent = CreateDefaultSubobject<UNAInventoryComponent>(TEXT("InventoryComponent"));
-
+	InventoryComponent->SetupAttachment(InventoryWidgetBoom, USpringArmComponent::SocketName);
+	InventoryComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	
 	LeftHandChildActor = CreateDefaultSubobject<UChildActorComponent>(TEXT("LeftHandChildActor"));
 	RightHandChildActor = CreateDefaultSubobject<UChildActorComponent>(TEXT("RightHandChildActor"));
 	LeftHandChildActor->SetupAttachment(GetMesh(), LeftHandSocketName);
@@ -336,7 +344,7 @@ void ANACharacter::ToggleInventoryWidget()
 {
 	if (ensure(InventoryComponent != nullptr))
 	{
-		if (InventoryComponent->IsInventoryWidgetReleased())
+		if (InventoryComponent->IsWidgetVisible())
 		{
 			InventoryComponent->CollapseInventoryWidget();
 		}

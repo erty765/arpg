@@ -73,10 +73,13 @@ class ANACharacter : public ACharacter, public IAbilitySystemInterface, public I
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
 	UInputAction* InteractionAction;
 
+	/* Inventory*/
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<class UNAInventoryComponent> InventoryComponent;
-
-	/* Inventory Action */
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Inventory, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USpringArmComponent> InventoryWidgetBoom;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
 	UInputAction* InventoryAction ;
 

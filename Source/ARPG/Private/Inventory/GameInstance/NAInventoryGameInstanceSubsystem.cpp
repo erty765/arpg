@@ -3,7 +3,7 @@
 
 #include "Inventory/GameInstance/NAInventoryGameInstanceSubsystem.h"
 
-#include "Item/Subsystem/NAItemEngineSubsystem.h"
+#include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
 
 void UNAInventoryGameInstanceSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {

@@ -40,9 +40,9 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
-	//======================================================================================================================
-	// Interactable Interface Implements
-	//======================================================================================================================
+//======================================================================================================================
+// Interactable Interface Implements
+//======================================================================================================================
 public:
 	virtual void BeginInteract_Implementation(AActor* Interactor) override;
 	virtual void EndInteract_Implementation(AActor* Interactor) override;

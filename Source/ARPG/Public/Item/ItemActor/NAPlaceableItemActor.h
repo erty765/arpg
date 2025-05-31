@@ -15,9 +15,9 @@ public:
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void PostInitializeComponents() override;
 
-	//======================================================================================================================
-	// Interactable Interface Implements
-	//======================================================================================================================
+//======================================================================================================================
+// Interactable Interface Implements
+//======================================================================================================================
 public:
 	virtual void BeginInteract_Implementation(AActor* Interactor) override;
 	virtual void EndInteract_Implementation(AActor* Interactor) override;

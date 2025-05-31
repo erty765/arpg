@@ -2,7 +2,7 @@
 #include "Item/ItemActor/NAItemActor.h"
 
 #include "DataTableEditorUtils.h"
-#include "Item/Subsystem/NAItemEngineSubsystem.h"
+#include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
 #include "Components/SphereComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -111,7 +111,6 @@ ANAItemActor::ANAItemActor(const FObjectInitializer& ObjectInitializer)
 	
 	ItemDataID = NAME_None;
 	bItemDataInitialized = false;
-	
 }
 
 void ANAItemActor::PostInitProperties()
@@ -198,26 +197,6 @@ void ANAItemActor::PreDuplicate(FObjectDuplicationParameters& DupParams)
 	}
 }
 
-void ANAItemActor::OnConstruction(const FTransform& Transform)
-{
-	Super::OnConstruction(Transform);
-	
-	if (!HasAnyFlags(RF_ClassDefaultObject) && !GetWorld()->IsPreviewWorld())
-	{
-		if (ItemDataID.IsNone())
-		{
-			const UNAItemData* ItemData = UNAItemEngineSubsystem::Get()->CreateItemDataByActor(this);
-			ItemDataID = ItemData->GetItemID();
-			
-			bItemDataInitialized = true;
-		}
-		else
-		{
-			bItemDataInitialized = true;
-		}
-	}
-}
-
 #if WITH_EDITOR
 void ANAItemActor::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {
@@ -242,11 +221,16 @@ void ANAItemActor::PostEditChangeProperty(FPropertyChangedEvent& PropertyChanged
 
 		if (InteractableInterfaceRef)
 		{
-			FText meta_InteractionName = InteractableInterfaceRef->GetInteractableData_Internal().InteractionName;
-			FText this_InteractionName = ItemInteractionButtonText->Text;
-			if (this_InteractionName.ToString() != meta_InteractionName.ToString())
+			FNAInteractableData IxData;
+			const bool bSucceed = GetInteractableData_Internal(IxData);
+			if (bSucceed)
 			{
-				meta_InteractionName = this_InteractionName;
+				FText meta_InteractionName = IxData.InteractionName;
+				FText this_InteractionName = ItemInteractionButtonText->Text;
+				if (this_InteractionName.ToString() != meta_InteractionName.ToString())
+				{
+					meta_InteractionName = this_InteractionName;
+				}
 			}
 		}
 
@@ -413,12 +397,12 @@ void ANAItemActor::ExecuteItemPatch(UClass* ClassToPatch, const FNAItemBaseTable
 
 		// Hierarchy & Property settings
 		SetRootComponent(ItemRootShape);
-		ItemRootShape->RegisterComponent();
 		ItemRootShape->Mobility = EComponentMobility::Movable;
+		ItemRootShape->RegisterComponent();
 
 		ItemMesh->AttachToComponent(ItemRootShape, FAttachmentTransformRules::KeepRelativeTransform);
-		ItemMesh->RegisterComponent();
 		ItemMesh->Mobility = EComponentMobility::Movable;
+		ItemMesh->RegisterComponent();
 		if (UStaticMeshComponent* StaticMeshComp = Cast<UStaticMeshComponent>(ItemMesh))
 		{
 			StaticMeshComp->SetStaticMesh(PatchData->StaticMeshAssetData.StaticMesh);
@@ -433,10 +417,12 @@ void ANAItemActor::ExecuteItemPatch(UClass* ClassToPatch, const FNAItemBaseTable
 		}
 
 		ItemInteractionButton->AttachToComponent(ItemMesh, FAttachmentTransformRules::KeepRelativeTransform);
+		ItemInteractionButton->Mobility = EComponentMobility::Movable;
 		ItemInteractionButton->RegisterComponent();
 		ItemInteractionButton->SetSprite(PatchData->IconAssetData.Icon);
 
 		ItemInteractionButtonText->AttachToComponent(ItemInteractionButton, FAttachmentTransformRules::KeepRelativeTransform);
+		ItemInteractionButtonText->Mobility = EComponentMobility::Movable;
 		ItemInteractionButtonText->RegisterComponent();
 
 		if (!OldComponents.IsEmpty())
@@ -476,34 +462,23 @@ void ANAItemActor::ExecuteItemPatch(UClass* ClassToPatch, const FNAItemBaseTable
 }
 #endif
 
-void ANAItemActor::BeginItemInitialize_Internal()
+void ANAItemActor::OnConstruction(const FTransform& Transform)
 {
-	InitItemData_Internal();
-	InitItemActor_Internal();
+	Super::OnConstruction(Transform);
+	
+	if (!HasAnyFlags(RF_ClassDefaultObject) && !GetWorld()->IsPreviewWorld())
+	{
+		InitItemData_Internal();
+	}
 }
 
 void ANAItemActor::InitItemData_Internal()
 {
-	if (bItemDataInitialized)
+	if (bItemDataInitialized || !ItemDataID.IsNone())
 	{
 		return;
 	}
-
-	if (HasAnyFlags(RF_ClassDefaultObject))
-	{
-		if (!ItemDataID.IsNone())
-		{
-			bItemDataInitialized = true;
-			VerifyInteractableData_Internal();
-			return;
-		}
-		else
-		{
-			ensure(false);
-			return;
-		}
-	}
-
+	
 	if (const UNAItemData* NewItemData = UNAItemEngineSubsystem::Get()->CreateItemDataByActor(this))
 	{
 		ItemDataID = NewItemData->GetItemID();
@@ -529,33 +504,12 @@ void ANAItemActor::VerifyInteractableData_Internal()
 	{
 		InteractableInterfaceRef = this;
 		
-		if (!CheckInteractableEdit(InteractableInterfaceRef->Execute_GetInteractableData(this)))
-		{
-			ensure(false);
-		}
+		CheckInteractableEdit(InteractableInterfaceRef->Execute_GetInteractableData(this));
 	}
 	else
 	{
 		ensure(false);
 	}
-}
-
-void ANAItemActor::InitItemActor_Internal()
-{
-	if (bItemDataInitialized)
-	{
-		InitItemActor_Impl();
-		OnItemActorInitialized();
-	}
-}
-
-void ANAItemActor::OnItemActorInitialized_Implementation()
-{
-}
-
-void ANAItemActor::InitItemActor_Impl()
-{
-	// OnConstruction 때 뭐할거임
 }
 
 void ANAItemActor::BeginPlay()
@@ -581,31 +535,30 @@ const UNAItemData* ANAItemActor::GetItemData() const
 
 FNAInteractableData ANAItemActor::GetInteractableData_Implementation() const
 {
-	return GetInteractableData_Internal();
+	FNAInteractableData Result;
+	GetInteractableData_Internal(Result);
+	return Result;
 }
 
-const FNAInteractableData& ANAItemActor::GetInteractableData_Internal() const
+bool ANAItemActor::GetInteractableData_Internal(FNAInteractableData& OutInteractableData) const
 {
 	const FNAInteractableData* InteractableDataRef = nullptr;
-	//if (ItemData.IsValid())
-	if (GEngine)
+	
+	if (const UNAItemData* RuntimeItemData = UNAItemEngineSubsystem::Get()->GetRuntimeItemData(ItemDataID))
 	{
-		// const FNAItemBaseTableRow* ItemMetaData = ItemData->GetItemMetaDataStruct<FNAItemBaseTableRow>();
-		// if (ItemMetaData)
-		// {
-		// 	InteractableDataRef = TryGetInteractableData(ItemMetaData);
-		// }
-		const UNAItemData* ThisItemData = UNAItemEngineSubsystem::Get()->GetRuntimeItemData(ItemDataID);
-		if (ThisItemData)
+		if (RuntimeItemData)
 		{
-			if (const FNAItemBaseTableRow* ItemMetaData = ThisItemData->GetItemMetaDataStruct<FNAItemBaseTableRow>())
+			if (const FNAItemBaseTableRow* ItemMetaData = RuntimeItemData->GetItemMetaDataStruct<FNAItemBaseTableRow>())
 			{
 				InteractableDataRef = TryGetInteractableData(ItemMetaData);
 			}
 		}
 	}
-	
-	return *InteractableDataRef;
+	if (InteractableDataRef)
+	{
+		OutInteractableData = *InteractableDataRef;
+	}
+	return InteractableDataRef ? true : false;
 }
 
 void ANAItemActor::SetInteractableData_Implementation(const FNAInteractableData& NewInteractableData)
@@ -622,7 +575,7 @@ void ANAItemActor::SetInteractableData_Implementation(const FNAInteractableData&
 
 bool ANAItemActor::CanUseRootAsTriggerShape_Implementation() const
 {
-	return ItemRootShape && (ItemRootShape->GetBodySetup() ? true : false);
+	return ItemRootShape ? true : false;
 }
 
 bool ANAItemActor::CanInteract_Implementation() const
@@ -638,7 +591,7 @@ void ANAItemActor::NotifyInteractableFocusBegin_Implementation(AActor* Interacta
 	{
 		if (UNAInteractionComponent* InteractionComp = TryGetInteractionComponent(InteractorActor))
 		{
-			//InteractionComp->OnInteractableFound(this);
+			InteractionComp->OnInteractableFound(this);
 			const bool bSucceed = InteractionComp->OnInteractableFound(this);
 			// @TODO: ANAItemActor 쪽에서 '상호작용 버튼 위젯' release?
 		}
@@ -690,37 +643,6 @@ void ANAItemActor::ExecuteInteract_Implementation(AActor* InteractorActor)
 	// @TODO: 상호작용 실행에 필요한 로직이 있으면 여기에 추가
 	//}
 	
-}
-
-void ANAItemActor::GetInitInteractableDataParams_MacroHook(ENAInteractableType& OutInteractableType, FString& OutInteractableName,
-	/*FString& OutInteractableScript,*/ float& OutInteractableDuration, int32& OutQuantity) const
-{
-	UE_LOG(LogTemp, Warning, TEXT("[%s::GetInitInteractableDataParams_MacroHook]  오버라이딩 없음. ANAItemActor의 기본값으로 초기화"), *GetClass()->GetName());
-	
-	OutInteractableType		= ENAInteractableType::None;
-	OutInteractableName		= TEXT("");
-	/*OutInteractableScript	= TEXT("");*/
-	OutInteractableDuration = 0.f;
-	OutQuantity				= 0;
-}
-
-void ANAItemActor::SetInteractableDataToBaseline_Implementation(ENAInteractableType InInteractableType,
-                                                          const FString& InInteractionName, /*const FString& InInteractionScript,*/ float InInteractionDuration, int32 InQuantity)
-{
-	// if (!this->GetClass()->IsChildOf<class ANAPickableItemActor>())
-	// {
-	// 	InQuantity = FMath::Clamp(InQuantity, 0, 1);
-	// }
-	//
-	FNAInteractableData InteractableDataBaseline;
-	InteractableDataBaseline.InteractableType = InInteractableType;
-	InteractableDataBaseline.InteractionName = FText::FromString(InInteractionName);
-	//InteractableDataBaseline.InteractionScript = FText::FromString(InInteractionScript);
-	InteractableDataBaseline.InteractionDuration = InInteractionDuration;
-	InteractableDataBaseline.Quantity = InQuantity;
-	MarkBaselineModified(InteractableDataBaseline);
-
-	Execute_SetInteractableData(this, InteractableDataBaseline);
 }
 
 bool ANAItemActor::IsOnInteract_Implementation() const

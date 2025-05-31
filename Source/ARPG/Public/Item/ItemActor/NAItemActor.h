@@ -5,8 +5,6 @@
 #include "Item/ItemData/NAItemData.h"
 #include "NAItemActor.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnItemActorInitialized, ANAItemActor*, InitializedItemActor);
-
 UCLASS(Abstract)
 class ARPG_API ANAItemActor : public AActor, public INAInteractableInterface
 {
@@ -44,23 +42,9 @@ protected:
 	void OnItemDataInitialized();
 	virtual void OnItemDataInitialized_Implementation();
 
-	// 파생 클래스 오버라이딩 전용
-	// @parm	InDataTableRowHandle: ANAItemActor::InitItemActor_Internal에서 유효성 검사 실행한 뒤 전달됨
-	virtual void InitItemActor_Impl();
-
-	UFUNCTION(BlueprintCallable, BlueprintNativeEvent)
-	void OnItemActorInitialized();
-	virtual void OnItemActorInitialized_Implementation();
-
 private:
-	void BeginItemInitialize_Internal();
 	void InitItemData_Internal();
-	void InitItemActor_Internal();
 	void VerifyInteractableData_Internal();
-	
-public:
-	UPROPERTY(BlueprintAssignable, Category = "Item Actor")
-	FOnItemActorInitialized OnItemActorInitializedDelegate;
 	
 protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Item Actor | Root Shape")
@@ -88,60 +72,9 @@ private:
 	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "Item Actor", meta = (AllowPrivateAccess = "true"))
 	FName ItemDataID;
 
+	UPROPERTY(Transient)
 	uint8 bItemDataInitialized :1;
 	
-	struct NAItemActorProp
-	{
-		enum class Flag : uint16
-		{
-			None						= 0,
-			
-			NeedsUpdate					= 1 << 0,
-		
-			ItemRootShapeType			= 1 << 1,
-			ItemRootShape				= 1 << 2,
-			ItemMeshType				= 1 << 3,
-			ItemMesh					= 1 << 4,
-			ItemFractureCollection		= 1 << 5,
-			ItemFractureCache			= 1 << 6,
-			ItemAnimClass				= 1 << 7,
-			ItemInteractionButton		= 1 << 8,
-			ItemInteractionButtonText	= 1 << 9,
-			ItemDataID					= 1 << 10,
-		};
-
-		static constexpr Flag AllProps =
-			static_cast<Flag>(
-				// (1 << (11 + 1)) - (1 << 0)
-				(static_cast<uint16>(Flag::ItemDataID) << 1)
-				- static_cast<uint16>(Flag::NeedsUpdate)
-			);
-
-		static constexpr bool HasAnyFlags(const Flag& Value, const Flag Test)
-		{
-			return (static_cast<uint16>(Value) & static_cast<uint16>(Test)) != 0;
-		}
-		
-		static constexpr bool HasAllFlags(const Flag& Value, const Flag Test)
-		{
-			return (static_cast<uint16>(Value) & static_cast<uint16>(Test))
-				 == static_cast<uint16>(Test);
-		}
-		
-		static constexpr void AddFlags(Flag& Value, Flag ToAdd)
-		{
-			uint16 NewBits = static_cast<uint16>(Value) | static_cast<uint16>(ToAdd);
-						
-			Value = static_cast<Flag>(NewBits);
-		}
-		
-		static constexpr void RemoveFlags(Flag& Value, Flag ToRemove)
-		{
-			Value = static_cast<Flag>(static_cast<uint16>(Value) & ~static_cast<uint16>(ToRemove));
-		}
-	};
-	NAItemActorProp::Flag PropertyFlags;
-
 	static void MarkItemActorCDOSynchronized(TSubclassOf<ANAItemActor> ItemActorClass)
 	{
 		if (ItemActorClass)
@@ -172,7 +105,7 @@ private:
 //======================================================================================================================
 public:
 	virtual FNAInteractableData GetInteractableData_Implementation() const override;
-	virtual const FNAInteractableData& GetInteractableData_Internal() const override;
+	virtual bool GetInteractableData_Internal(FNAInteractableData& OutInteractableData) const override;
 	virtual void SetInteractableData_Implementation(const FNAInteractableData& NewInteractableData) override;
 	virtual bool CanUseRootAsTriggerShape_Implementation() const override;
 	virtual bool CanInteract_Implementation() const override;
@@ -190,20 +123,4 @@ protected:
 	UPROPERTY()
 	TScriptInterface<INAInteractableInterface> InteractableInterfaceRef = nullptr;
 	
-	// INAInteractableInterface 메서드 x, ANAItemActor의 파생 클래스에서 구현해야하는 매크로 훅 함수
-	// 오버라이딩이 필요하다면, 파생 클래스 선언 부 안에 IMPLEMENT_MACROHOOK_GetInitInteractableDataParams 매크로 쓰셈
-	virtual void GetInitInteractableDataParams_MacroHook(
-		ENAInteractableType& OutInteractableType,
-		FString&			 OutInteractableName,
-		/*FString&			 OutInteractableScript,*/
-		float&				 OutInteractableDuration,
-		int32&				 OutQuantity) const;
-	
-private:
-	virtual void SetInteractableDataToBaseline_Implementation(
-		ENAInteractableType InInteractableType,
-		const FString&				InInteractionName,
-		/*const FString&				InInteractionScript,*/
-		float				InInteractionDuration,
-		int32				InQuantity) override final;
 };
