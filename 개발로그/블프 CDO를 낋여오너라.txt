@@ -1,0 +1,170 @@
+75%) C++ CDO 생성 시점:
+Warning      LogTemp                   [NAItemActor]  c++ CDO 생성자
+Warning      LogTemp                   [NAItemActor]  c++ CDO PostInitProperties
+Warning      LogTemp                   [NAPickableItemActor]  c++ CDO 생성자
+Warning      LogTemp                   [NAPickableItemActor]  c++ CDO PostInitProperties
+Warning      LogTemp                   [NAPlaceableItemActor]  c++ CDO 생성자
+Warning      LogTemp                   [NAPlaceableItemActor]  c++ CDO PostInitProperties
+
+83%쯤?) UNAItemEngineSubsystem::Initialzie 시점:
+Warning      LogTemp                   [UNAItemGameInstanceSubsystem::Initialize]  아이템 DT LoadSynchronous 시작
+Warning      LogTemp                   [BP_Interaction_Door_C]  블프 CDO 생성자
+Warning      LogTemp                   [BP_Interaction_Door_C]  블프 CDO PostInitProperties
+Warning      LogTemp                   [SKEL_BP_Interaction_Door_C]  블프 CDO 생성자
+Warning      LogTemp                   [SKEL_BP_Interaction_Door_C]  블프 CDO PostInitProperties
+Warning      LogTemp                   [BP_Interaction_DoorOpenButton_C]  블프 CDO 생성자
+Warning      LogTemp                   [BP_Interaction_DoorOpenButton_C]  블프 CDO PostInitProperties
+Warning      LogTemp                   [SKEL_BP_Interaction_DoorOpenButton_C]  블프 CDO 생성자
+Warning      LogTemp                   [SKEL_BP_Interaction_DoorOpenButton_C]  블프 CDO PostInitProperties
+Warning      LogTemp                   [BP_PlaceableObject_C]  블프 CDO 생성자
+Warning      LogTemp                   [BP_PlaceableObject_C]  블프 CDO PostInitProperties
+Warning      LogTemp                   [SKEL_BP_PlaceableObject_C]  블프 CDO 생성자
+Warning      LogTemp                   [SKEL_BP_PlaceableObject_C]  블프 CDO PostInitProperties
+Warning      LogTemp                   [BP_Interaction_Door_C]  블프 CDO PostLoad
+Warning      LogTemp                   [BP_Interaction_DoorOpenButton_C]  블프 CDO PostLoad
+Warning      LogTemp                   [BP_PlaceableObject_C]  블프 CDO PostLoad
+Log		LogTemp                   [UNAItemGameInstanceSubsystem]  Loaded DataTable: DT_ItemBase
+Warning      LogTemp                   [UNAItemEngineSubsystem::Initialize]  아이템 메타데이터 맵 초기화 완료
+
+isplay      LogInit                   Engine is initialized. Leaving FEngineLoop::Init()
+Log          SourceControl             리비전 컨트롤이 비활성화되어 있습니다.
+Log          LogUnrealEdMisc           Loading editor; pre map load, took 44.993
+Log          Cmd                       MAP LOAD FILE="../../../../erty765-arpg/Content/00_ProjectNA/02_Level/Level_NAMainGame.umap" TEMPLATE=0 SHOWPROGRESS=1 FEATURELEVEL=4
+Log          LogWorld                  UWorld::CleanupWorld for Untitled, bSessionEnded=true, bCleanupResources=true
+Log          LogSlate                  InvalidateAllWidgets triggered.  All widgets were invalidated
+Log          LogWorldMetrics           [UWorldMetricsSubsystem::Deinitialize]
+Log          LogWorldMetrics           [UWorldMetricsSubsystem::Clear]
+Display      LogAudio                  Audio Device unregistered from world 'None'.
+Log          LogUObjectHash            Compacting FUObjectHashTables data took   2.51ms
+Warning      LogTemp                   [BP_Interaction_Door_C]  블프 일반 객체 생성자
+Warning      LogTemp                   [BP_Interaction_Door_C]  블프 일반 객체 PostInitProperties
+Warning      LogTemp                   [BP_Interaction_Door_C]  블프 일반 객체 PostLoad
+Display      LogAudio                  Audio Device (ID: 1) registered with world 'Level_NAMainGame'.
+Log          LogWorldMetrics           [UWorldMetricsSubsystem::Initialize]
+Warning      LogUObjectGlobals         Class which was marked abstract was trying to be loaded in Outer /Engine/Transient.UnrealEdEngine_0:NAItemEngineSubsystem_0.  It will be nulled out on save. None NAItemData
+Warning      LogOutputDevice           Script Stack (0 frames) :
+Error        LogOutputDevice           Ensure condition failed: false [File:D:\UE5.4.3\Engine\Source\Runtime\CoreUObject\Private\UObject\UObjectGlobals.cpp] [Line: 3277] 
+Error        LogOutputDevice           Class which was marked abstract was trying to be loaded in Outer /Engine/Transient.UnrealEdEngine_0:NAItemEngineSubsystem_0.  It will be nulled out on save. None NAItemData
+Log          LogStats                              FDebug::EnsureFailed -  0.000 s
+Warning      LogTemp                   [UNAItemData::PostInitProperties]  일반) NAItemData_0
+Warning      LogTemp                   [UNAItemData::PostInitProperties]  일반) NAItemData_0's ID is none.
+
+
+블루프린트 CDO의 오브젝트 플래그:
+RF_Public | RF_ClassDefaultObject | RF_ArchetypeObject | RF_WasLoaded | RF_LoadCompleted
+블루프린트 CDO의 서브오브젝트의 오브젝트 플래그:
+RF_Public | RF_Transactional | RF_ArchetypeObject | RF_DefaultSubObject
+
+블루프린트 PostLoad되는 일반 객체의 오브젝트 플래그:
+
+블루프린트 PostLoad되는 일반 객체의 서브오브젝트의 오브젝트 플래그:
+
+블루프린트 편집창 클릭할때 생성되는 일반 객체의 오브젝트 플래그:
+RF_Transactional | RF_Transient
+블루프린트 편집창 클릭할때 생성되는 일반 객체의 서브오브젝트의 오브젝트 플래그:
+RF_Transactional | RF_Transient
+
+(PatchItemActorBlueprintCDO 이후 해당 클래스의 CDO 객체의 프로퍼티 상황)
+[AActor]: (Name=Default__BP_Interaction_Door_C)
+[ItemRootShapeType]: IRT_Capsule
+[ItemRootShape]: {={ObjectPtr=0x00000afc97b5a100 (Name = "ItemRootShape(Capsule)", Owner = 0x00000afc7692cd00 (Name="Default__BP_Interaction_Door_C")), DebugPtr=0x00000afc97b5a100 (Name = "ItemRootShape(Capsule)", Owner = 0x00000afc7692cd00 (Name="Default__BP_Interaction_Door_C"))}}
+[ItemMeshType]: IMT_Skeletal
+[ItemMesh]: {={ObjectPtr=0x00000afc99125000 (Name = "ItemMesh(Skeletal)", Owner = 0x00000afc7692cd00 (Name="Default__BP_Interaction_Door_C")), DebugPtr=0x00000afc99125000 (Name = "ItemMesh(Skeletal)", Owner = 0x00000afc7692cd00 (Name="Default__BP_Interaction_Door_C"))}}
+
+(에디터 프리뷰 객체의 OnConsturction 호출 당시, this의 프로퍼티 상황)
+[AActor]: (Name=BP_Interaction_Door_C_0)
+[ItemRootShapeType]: IRT_Sphere
+[ItemRootShape]: {={ObjectPtr=0x00000afc97b59a00 (Name = "ItemRootShape(Capsule)", Owner = 0x00000afc9917aa00 (Name="BP_Interaction_Door_C"_0)), DebugPtr=0x00000afc97b59a00 (Name = "ItemRootShape(Capsule)", Owner = 0x00000afc9917aa00 (Name="BP_Interaction_Door_C"_0))}}
+[ItemMeshType]: IMT_Static
+[ItemMesh]: {={ObjectPtr=0x00000afc99126400 (Name = "ItemMesh(Skeletal)", Owner = 0x00000afc9917aa00 (Name="BP_Interaction_Door_C"_0)), DebugPtr=0x00000afc99126400 (Name = "ItemMesh(Skeletal)", Owner = 0x00000afc9917aa00 (Name="BP_Interaction_Door_C"_0))}}
+
+-에디터 프리퓨용 객체의 OnConstruction
+trasient 떼고 한번 제대로 동기화되는지 실험 -> 여전히 uenum 멤버들 값 다름
+안되면) visibleanywhere 붙이고 동기화되는지 실험 -> 아직도!!!
+
+-블프 에디터 창 킬때 처음 들어오는 객체(아직 풀 블루프린트 에디터 켜기 전)의 오브젝트 플래그:
+(Name=BP_Interaction_Door_C_0)
+RF_Transactional | RF_Transient | RF_NeedInitialization
+->PostActorCreated의 super 호출 이후 | RF_NeedInitialization 사라짐!
+->아직 블루프린트 컴파일러에 의해 제너레이트 되기 전인듯
+-> 그리고 OnConstruction: ComponentsTemplate에 2개(새로 생성해서 add한 capsule, skeletal)
+
+-그다음 바로 한번 더 들어오는? (에디터 창 클릭 처음 할때 한번 더 생기는듯)
+-> 생성자: RF_Transient | RF_NeedInitialization
+-> PostCreated: RF_Transient
+
+일단 처음 켜서 뷰포트 열었을땐 잘뜸 (왼쪽 아웃라인 & 뷰포트 프리뷰)
+여기서 컴파일 한번 더 누르면 기본 생성자에서 shpere 등등 추가됨
+클래스 확인해보니 SKEL_어쩌구, 블루프린트 뼈대 클래스의 CDO였음
+
+풀 블루프린트 창 켤때 HandlePostCDOCompiled 호출됨! (이벤트 그래프 보임)
+근데 ANAItemActor 관련 없는 맥락에서 여러번 호출되었음
+이때도 기본생성자->PostCreatedActor->OnConstruction순으로 호출됨
+
+뷰포트 완전히 보이고 나서 (아직 괜찮은 상태) 컴파일 버튼 한번 누르니까
+1. 블프 CDO 기본 생성자로 호출됨 ( (Name=Default__SKEL_BP_Interaction_Door_C))
+   (생성자 단계에서:RF_Public | RF_ClassDefaultObject | RF_ArchetypeObject | RF_NeedInitialization)
+ => 여기서 기본 값들이 덕지덕지 추가되는 듯
+ => 오브젝트 아키타입  (Name=Default__NAPlaceableItemActor)
+
+2. PostInitializeProperties 들어옴
+
+바로 이어서 블프 CDO 생성자 들어옴
+1. 기본 생성자 & PostInitProperties 호출 후
+2. HandlePostCDOCompiled 호출됨 -> PatchItemActorBlueprintCDO로 이어짐
+
+이후 생성자&Properties 반복 3번;;
+결과: 또 덕지덕지 붙음
+
+[BP_Interaction_Door_C]  "블프 일반 객체" PostInitProperties 이후
+맵에 미리 배치된 액터 있으면 레벨 로드시 해당 액터의 PostLoadSubobjects호출됨 
+여기서 수동 동기화 한번 해주기 (오브젝트 플래그 있는 프로퍼티들은 제대로 복제됨)
+[BP_Interaction_Door_C]  블프 일반 객체 PostLoad
+이후 OnConstruction
+
+skel_ 어쩌구 patch cdo 당시
+RF_Public | RF_ClassDefaultObject | RF_ArchetypeObject | RF_NeedInitialization
+
+c++ 네이티브 CDO의 서브오브젝트의 오브젝트 플래그:
+RF_Public | RF_ClassDefaultObject | RF_ArchetypeObject
+
+블루프린트 CDO의 서브오브젝트의 오브젝트 플래그:
+RF_Public | RF_ClassDefaultObject | RF_ArchetypeObject | RF_WasLoaded | RF_LoadCompleted
+
+CDO 동적 초기화에서 SKEL_ 클래스 ComponentTemplates 비어있음
+
+Warning      LogTemp                   [UNAItemEngineSubsystem::SynchronizeItemCDOWithMeta]  BP_Interaction_Door_C: CDO 동적 초기화 성공
+Warning      LogTemp                     서브오브젝트 플래그: Public | Transactional | ArchetypeObject | DefaultSubObject
+
+ [NAPickableItemActor]  c++ CDO 생성자: 서브오브젝트 플래그: Public | Transactional | ArchetypeObject | DefaultSubObject
+
+
+기본 블프 CDO 1fdb900
+{={ObjectPtr= (Name=Default__BP_Interaction_Door_C), DebugPtr= (Name=Default__BP_Interaction_Door_C)}}
+
+SKEL 블프 CDO 1fddc00
+{={ObjectPtr=(Name=Default__SKEL_BP_Interaction_Door_C), DebugPtr=(Name=Default__SKEL_BP_Interaction_Door_C)}}
+
+Default__BP_Interaction_Door_C 주소 확인: 0xaa69ddba500, 0xaa69ddba500
+
+BPClass: 0x86d5a821c00
+SkelClass: 0x86d5a822300
+
+ItemClass[0]: 0x86d5a821c00
+ItemClass[1]: 0x86d5a822300
+
+첫 동적초기화 당시:
+Default__BP_01_C: 0x524dc816e00
+
+기본생성자? RF_Transient | RF_NeedInitialization
+프리뷰? 추정) RF_Transactional | RF_Transient | RF_NeedInitialization
+
+브로드캐스트로 넘긴 class: BP_03_C) 0x99025144600
+이거 뭐야: (Name=REINST_BP_03_C_34, InternalFlags=ReachabilityFlag0)
+
+부모 액터: RF_Transactional | RF_Transient
+서브오브젝트: RF_Transactional | RF_Transient | RF_DefaultSubObject
+
+(Name=Default__BP_01_C): 0x6619b02f500 
+(Name=Default__SKEL_BP_01_C): 0x6619b02e600
+(Name=Default__BP_01_C): 0x6619b029b00 >> ???? 왜 CDO 두번 생기냐

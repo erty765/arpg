@@ -1,0 +1,302 @@
+[Main Issue]  상호작용 기능 | 인벤토리 기능 & 아이템 활용 기능 & 아이템 DT 관리 | 무기(attack, fire, reload) 기능
+
+[05/13]
+◎ 에셋 리스트 작성: 유효한/호환 가능한 에셋 추리고, 필요한 에셋만 다시 검토해야 함
+◎ 상호작용 기능 구현 로드맵: 인터페이스 및 Component를 활용하여 모듈화
+└ INAInteraction(UInteraction): '상호작용' 기능에 대한 모듈화를 담당, Component 외 다른 계열의 클래스에서도 상호작용 기능이 필요할 때 사용할 수 있어야 함
+└ UNAInteractionComponent:
+◎ 아이템 인벤토리부터 구현하기!!
+
+[05/14]
+◎ 인벤토리 시스템 구현하기 01: 아이템 데이터 만들기 -> 데이터 테이블로 관리
+◎ FItemBaseTableRow: 아이템 DT 기반 
+◎ 상호작용, 아이템 트리거 박스, 인벤토리에 stack하는 기능: 인터페이스로 빼기?
+◎ ANAItemBase에 INAInteraction 구현하기, 아이템 트리거 범위 설정을 위한 UShpereComponent 추가해서 루트로 만들기 -> 이건 선택 가능하도록?
+◎ 줍기 가능한 아이템이 있다면 -> ex "E"(줍기) 위젯 계속 띄워두기 (아이템마다 줍기 위젯 설정 x, 유저의 줍기 범위 내 줍기 가능한 아이템이 하나라도 있다면! 줍기 위젯 1개를 계속 띄우기, -> 그렇다면 아이템을 줍기 탐지 범위를 탐색하는 것은 유저 캐릭터에게 넘기기?)
+└ 줍기 및 상호작용 가능한 아이템이 활성화되었을 때, 이를 표시하는 위젯은 유저의 화면에서 처리, HUD에서 처리하기 (ex 줍기 가능한 범위 내에서 줍기 위젯 활성, 문처럼 고정된 오브젝트에 상호작용이 활성화된 동안 등)
+◎ 소비아이템: ANAConsumableItem : public ANAItemBase
+└ 소비아이템에 오브젝트 풀 필요한가..? 고민해보기
+◎ 탄약: 소비아이템 소속. 하지만 무기 쪽하고도 연관있음...
+└ ANAProjectile: 오브젝트 풀 사용해야함. 근데 오브젝트 풀을 어디에 두지??
+
+※※ 아이템 액터들 콜리전 설정 아직 안함!!! 프로파일 만들고 따로 설정해주기 ※※
+[05/16]
+아이템 서브시스템 [UNAItemGameInstanceSubsystem]:
+└ UItemDataTablesAsset: 아이템 DT를 싹 취합하는 용도로 쓸 예정. UItemDataTablesAsset 데이터 에셋 파일 하나 만들어서, 해당 파일에 아이템 DT 파일들 싹 넣어두기.
+└ UNAItemGameInstanceSubsystem::Initialize 단계에서 실행되는 것:
+   1) (경로 하드코딩된) UItemDataTablesAsset 파일 동기 로드해서 ItemDataTableSources에 아이템DT 파일 포인터 저장
+   2) ItemDataTableSources의 모든 요소의  Row를 순환해서 ItemMetaDataMap 초기화
+
+└ ItemMetaDataMap: 아이템 메타데이터 맵핑용, UClass-DTRowHandle, 클래스로 키값 검색 가능하기 때문에 BP 클래스에 대응 가능
+└ 일반 AActor 계열의 객체에서 (CDO 제외) ItemMetaDataMap에 접근하려면 PostInitProperties 호출 시점부터 접근하는걸 추천.
+아이템 DT [FNAItemBaseDataTable]: 이거 상속받아서 아이템 DT 세분화 (e.g. FWeaponDataTableRow)
+아이템 데이터/껍데기 [UNAItemData/ANAItemInstance]:
+└ UNAItemData: final. 아이템에 대한 [가변 데이터 + 메타 데이터]를 아이템 인스턴스별로 관리하기 위한 클래스. ANAItemInstance에 소유됨
+└ ANAItemInstance: 아이템의 시각적 구현 담당. ㄹㅇ 껍데기용. (나중에 오브젝트 풀 사용한 최적화 적용할까 고민중) 상호작용 인터페이스 상속시킬 예정. (CDO제외) PostInitProperties 때 UNAItemData 유효성 검사하고 null이면 아이템 서브시스템이 관리하는 아이템 메타데이터 맵에서 아이템 메타 데이터 가져와서 UNAItemData 초기화
+
+◎ NAItemInstance에서 InitItemData 로직 흐름 구성중
+
+[05/18]
+◎ UNAItemData, ANAItemInstance 로직 정리 완료
+◎ 상호작용 != 아이템 사용: 기능 분리
+└ 상호작용: 아이템 인스턴스(껍데기)가 활성화될 때 발생 -> 유저의 인벤토리에 소지된 아이템은 상호작용 X
+└ 아이템 사용: 아이템 데이터를 경유하여 발생 -> 아이템 사용으로 인해 아이템 데이터가 바뀜(수량, 상태 등)
+	└ 그렇다면 물약을 마시는 행위는? 아이템 사용: 물약 효과가 캐릭터에 적용, 물약 마시는 애니메이션이 있다면 -> 해당 아이템 인스턴스를 release해서 메쉬 시각화(물약 마시는 애니메이션은 캐릭터 쪽에서 처리)
+└ 상호작용은 INAInteraction 인터페이스로
+└ 아이템 사용은 UNAItemData의 메서드 활용: UNAItemData에 TWeakObjectPtr<T>로 해당 아이템을 소지 중인 객체 추적(Outer 개념x)
+◎ ANAPickableItemInstance ->ANAStackableItemInstance: 인벤토리에 여러 개 쌓을 수 있는? 월드에 소환되어 유저의 인벤토리에 복사되는 아이템들. 예를 들면, 일정 시간마다 월드에 리젠될 때마다 계속 주울 수 있는 아이템 
+
+[05/19]
+◎ ANAItemInstance: UNAInteraction 구현
+└ 구체적인 동작 수행 로직은x(이건 자식 클래스에서 구체화)
+└ 유저에게 상호작용 요청을 받아서 상호작용 트리거까지만
+◎ UNAInteractionComponent
+└ 인터렉터블 여러개를 Tick에서 추적: 가장 가까이에 놓인 인터렉터블 틱마다 갱신(위젯에 출력할 아이템 아이콘 변경을 위함), NearestInteractable에 있는 변수가 상호작용 대상 1순위
+◎ ANAPlaceableItemInstance: 맵에 고정되지만 상호작용이 필요한 아이템 오브젝트용 클래스
+└ 일단 문 열기/닫기, 레버 및 스위치 등등 맵에 영향을 주는 상호작용 부분 구현
+
+[05/20]
+◎ 전역 상호작용 구상하기: 이쪽에서 어떤 조건을 충족하면 저쪽에서 뭔가 트리거됨...
+└ 게임 인스턴스에서 전역 상호작용이 필요한 클래스? 객체?들 따로 맵핑하기
+◎ ANAPlaceableItemInstance: 레벨에 배치되는 환경 오브젝트, 상호작용 가능함: 문, 레버 등
+└ 일단 이것부터 러프하게 구현하기. 레벨 테스트용으로
+◎ 위젯 인터렉션 컴포넌트?? 월드에 배치된 위젯과 상호작용 할 수 있음 캐릭터에 붙이기
+└ 이걸 인터렉션 컴포넌트의 부모로 둘까? -> 기각. VR 게임에서나 쓸만한듯
+◎ 아이템 서브시스템 / 인벤토리 서브시스템 / 플레이어 스테이트 서브시스템 ... : 각자 기능에 따라 별도의 서브시스템으로 나누기
+└ 서버 권한에 따라 로직 분기할 필요x
+◎ Save&Load 매니저 서브시스템: 각 기능별 서브시스템들에게서 데이터를 받아와서 이를 하나의 USaveGame 컨테이너에 취합하여 저장. 세이브 파일 쓰기/읽기 담당
+└ (리슨 서버 기준) 서버 권한에 따라 로직 분기: 호스트 클라(서버)만 세이브/로드를 직접 수행, 게스트 클라는 호스트 클라에게 세이브/로드를 요청. 모든 세이브 파일은 호스트 클라가 소유.
+
+[05/21]
+◎ 인벤토리 서브시스템: 여기에서 인벤토리에 아이템 추가/삭제 등의 데이터 관리 및 직렬화/역직렬화에 필요한 데이터 쓰기/읽기
+└ 인벤토리 서브시스템에서 플레이어의 인벤토리 정보 관리(add, remove) → 인벤토리 컴포넌트는 인벤토리 서브 시스템에게 add/remove을 요청(접두사 Handle 붙은 메서드들: 인벤토리 서브시스템 함수의 래퍼 함수)
+◎ 생각해봤는데 상호작용 컴포넌트나 인벤토리 컴포넌트나 캐릭터가 아니고 플레이어 컨트롤러에 붙이는게 나을듯: 인풋을 직통으로 처리 가능
+└ pc에 상호작용 컴포넌트 부착할거면, OnPossess에 AttachToPawn, OnUnPossess에 DetachFromPawn
+└ 근데 Attach 안해도 될듯.. 언리얼이 AController에서 트랜스폼 관련 메서드들 죄다 private 처리 해놧음
+◎ ANAItemInstance -> ANAItemActor로 리네이밍
+◎ **PC에 InventoryComponent와 InventoryWidget을 함께 두기**
+└ 인벤토리 컴포넌트와 인벤토리 위젯의 소통은 델리게이트를 통해서만. 최대한 종속성 안생기게
+└ 두 객체 사이의 소통에 필요한 델리게이트를 PC에서 바인딩/언바인딩하기
+└ PC에서 인벤토리 컴포넌트와 인벤토리 위젯을 관리하면 좋은 점? 멀티플레이어 환경일때, 해당 객체들이 어떤 플레이어(가 빙의중인 폰)의 소유인지 일일히 확인할 필요가 없어짐
+
+[05/22]
+◎ 인벤토리 서브시스템에서 제공할 API
+└ Add Item
+└ Remove Item
+
+(아이템의 Usage에 관한 기능들을 여기서? 아님 아이템 서브시스템에서?)
+└ Equip Item: 플레이어 스테이트와 연관됨
+└ Unequip Item: 플레이어 스테이트와 연관됨
+└ Use Item: 아이템 데이터와 연관됨
+
+◎ 아이템 슬롯
+└ 
+
+◎ 인벤토리 컴포넌트의 기능
+└ Handle Add Item
+└ Handle Remove Item
+└ Handle Equip Item
+└ Handle Unequip Item
+└ Use Item
+└ 인벤토리 stack 관련 기능: 인벤토리의 최대 용량, 인벤토리 스택 정리 및 읽기 등
+└ 인벤토리 위젯에 broadcast: 렌더링 draw 요청
+
+◎ 아이템 Numeric Data
+└ 아이템 데이터의 수량 Quantity: 
+	→ 해당 아이템의 현재 수량(반드시 아이템 액터 1개 당 아이템 데이터 수량 1개 x)
+	→ 묶음 아이템은 아이템 액터 1개에 아이템 데이터 상의 수량이 여러개일 수 있음 
+└ 인벤토리에서의 아이템 수량 / 아이템 묶음 단위 Stack:
+	→ 인벤토리 슬롯(칸 1개)에 표시되는 아이템 수량 정보
+	→ Max Slot Stack Size: 이 아이템이 인벤토리의 슬롯 1칸에 최대 몇 개까지 들어갈 수 있는가
+					0 이면 수량 제한 없음, 1 이상이면 ~ (단 MaxInventoryStackSize보다 항상 작은 값이어야 함)
+	→ Max Inventory Stack Size: 인벤토리에 소지 가능한 최대 수량
+					    	0이면 수량 제한 없음, 1 이상이면 ~ 
+	→ bIsStackable: 소지 가능 여부
+└ 아이템 데이터의 Weight:
+	→ 인벤토리 슬롯(칸 1개)의 무게의 총합 == 인벤토리 용량
+	→ 인벤토리 슬롯 1칸의 무게 = Stack x Item Weight
+	→ 인벤토리의 용량을 계산할 때 필요
+
+◎ 인벤토리 연출
+└ 데드 스페이스는 인벤토리를 열어도 게임 월드의 시간이 멈추지 않음. 적의 습격을 받을 수 있는 무방비 상태
+
+[05/24]
+엔진서브시스템
+
+[05/25]
+아이템엔진 서브 시스템: 75프로때 CDO 생김 ㅁㅊ
+ - 생성자에서 CDO 넘기고 아이템메타init 실행했을때:
+	- ANAItemActor 기본 생성자 들어옴: 블루프린트 CDO인건 탐지햇으나, 아이템엔진 서브시스템 null로 뜨면서 스루 
+블프 CDO 컴파일될 때마다 훅, OnConstruction에서 블프 CDO와 일반 인스턴스 동기화
+
+[05/26]
+확인할것: 레벨에 블프 액터 배치하고 에디터 껏다 키기
+		1. 에디터 로딩때, 엔진아이템서브시스템에서 dt로드하면서 함께 로드되는 블프 cdo 생성(post-initialize 호출 타이밍 		볼 것)이 먼저인지, 아니면 레벨에 배치된 블프 액터 객체를 위한 cdo 생성이 먼저인지 확인
+		2. 해당 블프 cdo 생성 이후, 레벨에 배치되었던 액터가 생성되는 시점 확인하기
+
+=> 결과: c++ CDO 생성(75%)
+		→ [UNAItemGameInstanceSubsystem::Initialize]  아이템 DT LoadSynchronous 시작
+		→ 아이템 DT에 있던) 블프 CDO 생성
+		→ [UNAItemGameInstanceSubsystem]  Loaded DataTable: DT_ItemBase 
+		→ [UNAItemEngineSubsystem::Initialize]  아이템 메타데이터 맵 초기화 완료
+		→ Engine is initialized. Leaving FEngineLoop::Init()
+		→ (아마도 에디터 시작 레벨 생성 시작한듯)
+		→ [BP_Interaction_Door_C]  블프 일반 객체 생성자, PostInitProperties, PostLoad
+
+=> 결론: 에디터에서) 블프 컴파일때 훅 or 아이템 객체 생성자에서 IsItemActorCDOSynchronizedWithMeta 확인하고 후킹
+
+동적 초기화~~~~ 다시는 안쓸거야~~~~
+
+[05/27]
+SynchronizeCDO 때 패키지에 기록된 메모리들 제대로 제거하는 방법을 추가해서 댕글링 포인터 방지하는게 일단 급선무일거 같읍니다...
+아니면 이건 언리얼 블프가 하는 방식 응용해도 ㄱㅊ을듯 하고?? 언리얼에서 블프 킬때 CDO에서 복제한 임시 객체 생성되는데, 여기서 막 변경사항 만들고 컴파일&저장하면 이 임시객체를 바탕으로 CDO를 다시 만들고 변경된 사항을 직렬화하는 것 같앗슴
+이것처럼  처음에 CDO 동적 초기화할때 오브젝트 플래그에 StandAlone 빼고 Transient 붙여서 객체 생성하고, 블루프린트 컴파일 아님 저장하는 시점을 델리게이트로 후킹해서 이때 오브젝트 플래그를 바꾸든 뭐든 직렬화 객체로 바꾸는 로직을 껴넣어야할거같음
+
+[05/28]
+직렬화 안해
+
+[05/29]
+◎ 인벤토리 위젯
+└ UNAInventoryComponent: UWidgetComponent로 바꿈. 이 컴포넌트가 3D 위젯(UNAInventoryWidget) 보유
+
+◎ 진짜 정말 알고 싶지 않았던 사실: 블루프린트 클래스가 Mark Dirty 상태가 되면 클래스 자체가 바뀜
+└ GetClass()->하면 "BP_어쩌구_C" 가 아니라 "REINST_BP_어쩌구_C_숫자"가 나옴 극혐
+└ 비교하려는 두 클래스가 모두 블프라는 전제 하에)
+	GetClass()->ClassGeneratedBy = Other->ClassGenratedBy 이렇게 비교해야 결과가 제대로 나옴
+
+[05/30]
+◎ 인벤토리 3D 위젯: 월드에 배치 가능해야함.
+└ 캐릭터의 오른쪽 앞: 인벤토리 위젯 release 시, 약간 카메라 시점이 오른쪽 아래를 향하게 변경됨
+└ 보더(백그라운드 영역): 1136 x 640
+◎ 배경: 휘어진 영역 -> 휘어진 메쉬에 붙여서 처리
+◎ 실제 인벤토리 슬레이트들의 배치 방식: 2d 평면 -> 위젯 블루프린트로 처리
+
+[05/31]
+◎ 포토샵으로 인벤토리 텍스처 제작 마무리 [0]
+◎ UE 에디터에서 인벤토리 위젯 구성 마무리 [0]
+◎ 캐릭터) 스프링 암 <- 스태틱 메쉬 <- 위젯 컴포넌트 [0]
+└ 어태치 관계도. 3d 위젯 트랜스폼 설정
+◎ '인벤토리 열기' 입력 테스트
+└ Release 연출:
+	1) 캐릭터: 몸 살짝 오른쪽으로 돌리기(모니터 기준: 약 45도 반측면 오른쪽 응시)
+	2) 기본 카메라: 왼쪽으로 앵글 살짝 돌리기(캐릭터보다 덜 돌려야함)
+	3) 인벤토리 스프링암:(원래는 기본 카메라와 같은 위치에 있었음) 캐릭터 오른쪽으로 돌리기
+└ Collapse 연출:
+	1) 캐릭터: 몸 왼쪽으로 돌리기(다시 정면 응시
+	2) 기본카메라: 오른쪽으로 앵글 살짝 돌리기 (뒷통수 뷰)
+	3) 인벤토리 스프링암: 왼쪽으로 돌려서 기본 카메라와 똑같은 위치로 복귀
+
+Y 위치 +38
+◎ 인벤토리 입력
+└ 상하좌우 방향키로 인벤토리 슬롯 포커스 이동
+└ E: 아이템 사용 or 선택
+└ R: 아이템 일괄 정렬(종류별로 or 이름 순으로 -> 정렬 알고리즘 필요)
+└ 아이템 선택 정렬: Weapon / Inventory 섹션 나눠서 가능하도록
+	└ Q 키 누른 상태에서 아이템 선택(E) -> 그 다음에 선택된 아이템과 위치 교환 
+◎ 인벤토리 아이템 줍기 & 빼기
+└ 아이템 줍기: 상호작용 키로 줍는다. 아이템에 따라 상호작용 동작이 다름
+└ Pickable 아이템은 pick up mode에 따라 '줍기' or '잡기'로 나뉨
+└ 줍기: 줍기 애니메이션 등을 수행하자마자 인벤토리에 자동으로 이동됨
+└ 잡기: 인벤토리에 소지 불가능한 아이템. 잡기 입력시 캐릭터 손 메쉬에 붙음
+
+[06/01]
+◎ 인벤토리 백엔드: 줍줍 -> 아이템 인벤으로 이동 -> 인벤 슬롯에 저장 -> 직렬화 
+
+인벤 위젯 킬때: 왼 -> 오 (yaw 190)
+인벤 스프링암 회전 끝난뒤 -> 인벤토리 위젯 회전 살짝(위치 + 회전)
+일단 루트 컴포넌트를 회전해야할듯?
+
+
+스플라인 컴포넌트 포인트 총 3개: 
+[0]: 이건 연출 시작 직전, 카메라 컴포넌트의 트랜스폼과 일치시켜야 함
+[1]: 아이작 옆구리 트랜스폼 -> 고정되어있음
+[2]: 인벤토리 위젯 끌 때 카메라 원위치 할 트랜스폼 -> 고정하자
+
+(X=-1540.000000,Y=-190.000000,Z=248.150101)
+(X=-1869.048215,Y=-252.986007,Z=172.321583)
+
+[06/02]
+◎ 월드에서 아이템 줍기 -> 인벤토리에 아이템 보관 
+
+
+[06/03]
+
+[01, IT_Consumable, SmallPostion_C, 10], [03, IT_Consumable, SmallPostion_C, 2], [07, IT_Ammo, Ammo01_C, 50], 
+[12, IT_Consumable, BigPostion_C, 8], [14, IT_Ammo, MechineGunAmmo_C, 90], [15, IT_Ammo, MechineGunAmmo_C, 100],
+[19, IT_Ammo, MechineGunAmmo_C, 80],  [20, IT_Ammo, Ammo01_C, 50],  [25, IT_Consumable, GreatPostion_C, 5]   
+
+[01, IT_Consumable, BigPostion_C, 8], [02, IT_Consumable, GreatPostion_C, 5], [03,  IT_Consumable, SmallPostion_C, 10],
+[04, IT_Consumable, SmallPostion_C, 2],  [05, IT_Ammo, Ammo01_C, 50],  [06, IT_Ammo, Ammo01_C, 50],
+[07, IT_Ammo, MechineGunAmmo_C, 100], [08, IT_Ammo, MechineGunAmmo_C, 90], [09, IT_Ammo, MechineGunAmmo_C, 80]
+
+아니 도대체 왜 Outer가 날라가 있냐고 미쳣냐고
+
+[06/04]
+GET_MEMBER_NAME_CHECKED(UCylinderBuilder, OuterRadius)
+인벤토리 컴포넌트의 슬롯 - 인벤토리 위젯의 슬롯(버튼) 매핑하기: 슬롯ID와 슬롯(버튼) 변수명 일치시키기
+
+
+[06/05]
+아이템 디스크립션 최대 글자수: (공백포함) 207
+
+[06/06]
+인벤토리 카메라 앵글 전환 시 보간
+아이템 아이콘 및 수량 정보 인벤토리 위젯에 리드로우
+아이템 종류 세분화
+인벤토리 위젯 내에서 네비게이션
+
+[06/07]
+게임 & ui 동시 입력 처리
+마우스 자꾸 튀어나옴 
+유아이에 키보드 포커싱 처음 들어갈때 게임 입력 끊김 미친게야
+
+[06/08]
+회복 아이템
+구급팩: 소형/중형/대형 (1칸, 3칸, 5칸(풀)) 인벤토리 1칸씩 
+	자동 사용 기능: 인벤 안키고 단축키로 회복 아이템 자동 사용->대용량 우선
+스테이시스 팩: 에너지 충전. 단축키로 바로 충전 가능
+산소탱크: 크레딧으로 구매. 인벤토리 열고 직접사용
+
+무기 획득 방식: 상점에서 구매 
+탄약: 드랍 or 구매. 탄약 드랍은 보유한 무기에 맞는 탄약이 드랍됨.( 탄약 드랍 회수는 정해져잇음. 무기가 적음녀 탄약드랍되는 탄약 종류가 적음->한 종류당 드랍으로 파밍 가능한 탄약이 상대적으로 많음. 무기가 많음->드랍으로 나오는 탄약의 종류가 많아짐.->한 종류 당 드랍으로 얻을 수 있는 탄약 개수 줄어듬)
+
+슈트의 레벨에 따라 인벤토리 용량 달라짐 순차적 업그레이드만 가능(1->3 점프 불가)
+
+키네시스 모듈 
+
+INAItemUseInterface: 아이템 사용 로직 추상화
+
+[06/09]
+아이템 데이터에 기본 quantity 설정하기: 
+필요한 변수: Is Stackable == true, max slot stack size(한 묶음에 들어갈 수 있는 최대 개수), 
+
+// @TODO: 인벤토리 위젯에서 버튼에서 아이템 데이터 역추적하는 함수 만들기
+
+[06/10]
+
+[06/11]
+
+[06/12]
+
+[06/13]
+
+[06/14]
+상호작용 로직 리팩토링:
+Interaction Component: 상호작용 이니시 -> pickable/placeable 구분
+pick up 모드: holdable 삭제
+
+[06/15]
+아이템 계층구조 수정
+
+[06/16]
+아이템 계층구조 수정: 생성자에서 어태치먼트 설정 싹 빼기. 단 루트 컴포넌트를 ItemCollision으로 설정하는 부분만 생성자에서
+Error        LogSceneComponent         Component 'SphereComponent /Engine/Transient.World_2:PersistentLevel.BP_Test_C_0.ItemCollision(Sphere)' has 'NAItemWidgetComponent /Engine/Transient.World_2:PersistentLevel.BP_Test_C_0.ItemWidgetComponent' in its AttachChildren array, however, 'NAItemWidgetComponent /Engine/Transient.World_2:PersistentLevel.BP_Test_C_0.ItemWidgetComponent' believes it is not attached to anything
+Error        LogSceneComponent         Component 'SphereComponent /Engine/Transient.World_2:PersistentLevel.BP_Test_C_0.ItemCollision(Sphere)' has 'SphereComponent /Engine/Transient.World_2:PersistentLevel.BP_Test_C_0.TriggerSphere' in its AttachChildren array, however, 'SphereComponent /Engine/Transient.World_2:PersistentLevel.BP_Test_C_0.TriggerSphere' believes it is not attached to anything
+Error        LogSceneComponent         Component 'SphereComponent /Game/00_ProjectNA/02_Level/Level_NAMainGame.Level_NAMainGame:PersistentLevel.BP_Test_C_1.ItemCollision(Sphere)' has 'NAItemWidgetComponent /Game/00_ProjectNA/02_Level/Level_NAMainGame.Level_NAMainGame:PersistentLevel.BP_Test_C_1.ItemWidgetComponent' in its AttachChildren array, however, 'NAItemWidgetComponent /Game/00_ProjectNA/02_Level/Level_NAMainGame.Level_NAMainGame:PersistentLevel.BP_Test_C_1.ItemWidgetComponent' believes it is not attached to anything
+Error        LogSceneComponent         Component 'SphereComponent /Game/00_ProjectNA/02_Level/Level_NAMainGame.Level_NAMainGame:PersistentLevel.BP_Test_C_1.ItemCollision(Sphere)' has 'SphereComponent /Game/00_ProjectNA/02_Level/Level_NAMainGame.Level_NAMainGame:PersistentLevel.BP_Test_C_1.TriggerSphere' in its AttachChildren array, however, 'SphereComponent /Game/00_ProjectNA/02_Level/Level_NAMainGame.Level_NAMainGame:PersistentLevel.BP_Test_C_1.TriggerSphere' believes it is not attached to anything
+Error        LogSceneComponent         Component 'SphereComponent /Game/00_ProjectNA/02_Level/Level_NAMainGame.Level_NAMainGame:PersistentLevel.BP_Test_C_1.ItemCollision(Sphere)' has 'StaticMeshComponent /Game/00_ProjectNA/02_Level/Level_NAMainGame.Level_NAMainGame:PersistentLevel.BP_Test_C_1.ItemMesh(Static)' in its AttachChildren array, however, 'StaticMeshComponent /Game/00_ProjectNA/02_Level/Level_NAMainGame.Level_NAMainGame:PersistentLevel.BP_Test_C_1.ItemMesh(Static)' believes it is not attached to anything
+
+상호작용 시: 아이템 액터 생성 파괴 될때마다->OnFocusedItemFound & OnFocusedItemLost 자동 호출됨. 단 어태치되면서 생성된 액터는 이거 안들어옴
+
+
+언리얼 5.4 패키징 버그: 엔진 컨텐츠 폴더가 가끔 쿠킹에 포함 안됨 미친게야
