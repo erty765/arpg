@@ -300,3 +300,14 @@ Error        LogSceneComponent         Component 'SphereComponent /Game/00_Proje
 
 
 언리얼 5.4 패키징 버그: 엔진 컨텐츠 폴더가 가끔 쿠킹에 포함 안됨 미친게야
+
+[06/23]
+upgrade bench 아이템 액터: 상호작용 - 위젯 버튼으로 열고/닫기, 위젯 버튼 입력 받기, 위젯 열고 있는 동안을 어떻게 처리할 것인가?
+upgrade bench 컴포넌트: 캐릭터 인벤토리 컴포넌트에서 보유중인 업그레이드 아이템 & 노드 아이템 추적, gas에서 해당 캐릭터의 강화 상태 받아오기
+upgrade bench
+
+suit upgrade tree: 노드 전부 수동으로 구성,  해방 순서 -> 정적 배열 인덱스로 관리
+
+Upgrade Item Description widget 사이즈: 1680 X 167
+
+공간 확보 안된 곳에서 인벤토리 위젯 펼치면, 인벤 위젯 안보임(다른 오브젝트에 가려짐) -> 충돌처리 필요할까?
