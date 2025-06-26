@@ -318,3 +318,66 @@ ItemCollision을 루트로 두고 있는데 초기에 기본으로 만드는 서
 문제를 간소화하기 위해 서브 오브젝트로 씬컴포넌트 스텁을 하나 만들어서 루트로 둔 다음에 런타임에 아이템 콜리전으로 갈아끼운 다음 리플리케이션을 키고 Net Addressable하게 설정하고, Replicate SubObject에 넣어둠
 이후 클라이언트랑 서버가 위치 동기화를 하는데 문제가 없음을 확인함
 블루프린트에서 값을 수정하지 않고 데이터테이블에서 초기화하는게 목적이다보니까 굳이 쉐입 컴포넌트가 블루프린트 상에서 떠야할 이유는 없다고 생각하기도 했고
+
+~FObjectInitializer -> PostConstructInit ->InitProperties ->
+// InitProperties 일부
+if (!bNeedInitialize && bCanUsePostConstructLink)
+	{
+		// This is just a fast path for the below in the common case that we are not doing a duplicate or initializing a CDO and this is all native.
+		// We only do it if the DefaultData object is NOT a CDO of the object that's being initialized. CDO data is already initialized in the
+		// object's constructor.
+		if (DefaultData)
+		{
+			if (Class->GetDefaultObject(false) != DefaultData)
+			{
+				for (FProperty* P = Class->PropertyLink; P; P = P->PropertyLinkNext)
+				{
+					bool bIsTransient = P->HasAnyPropertyFlags(CPF_Transient | CPF_DuplicateTransient | CPF_NonPIEDuplicateTransient);
+					if (!bIsTransient || !P->ContainsInstancedObjectProperty())
+					{
+						if (P->IsInContainer(DefaultsClass))
+						{
+							P->CopyCompleteValue_InContainer(Obj, DefaultData);
+						}
+					}
+				}
+			}
+			else
+			{
+				// Copy all properties that require additional initialization (e.g. CPF_Config).
+				for (FProperty* P = Class->PostConstructLink; P; P = P->PostConstructLinkNext)
+				{
+					bool bIsTransient = P->HasAnyPropertyFlags(CPF_Transient | CPF_DuplicateTransient | CPF_NonPIEDuplicateTransient);
+					if (!bIsTransient || !P->ContainsInstancedObjectProperty())
+					{
+						if (P->IsInContainer(DefaultsClass))
+						{
+                            // 이 부분이 호출됨
+							P->CopyCompleteValue_InContainer(Obj, DefaultData);
+						}
+					}
+				}
+			}
+		}
+	}
+-> CopyCompleteValue_InContainer -> CopyCompleteValue
+
+
+[~06/26]
+아이템 액터 bp cdo 동적 초기화: 
+0. 아이템 dt: TSoftClassPtr<ANAItemActor> ItemClass -> TSoftClassPtr를 활용하여 아이템 액터 클래스 참조
+1. 아이템 엔진 서브 시스템 initialize:
+└ 1) 아이템 dt load synchronous -> 이때 ItemClass는 로드 안됨
+└ 2) TMap<TSoftClassPtr<ANAItemActor>, FDataTableRowHandle> SoftItemMetaData에 미리 dt 데이터 인스턴싱
+└ 3) SoftItemMetaData 순회: Key.LoadSynchronous() 호출 -> ANAItemActor 네이티브 생성자: UNAItemEngineSubsystem에서 SoftItemMetaData를 읽어옴 -> GetClass()를 키 값으로 value 검색 -> 검색된 Value(FNAItemBaseTableRow*)로 서브오브젝트 ItemCollision & ItemMesh 동적 초기화
+└ 4) 아이템 엔진 서브 시스템: 로드 바로 다음줄에서 에디터 전처리기 걸어두고, 블프 에셋 컴파일:
+	동적으로 초기화된 내용을 블프 에디터의 계층 트리 & 디테일 패널에 반영하기 위함
+
+아이템 액터 구조 개선:
+◎ ~BeginPlay 이전까지: 무조건 깡통 씬 컴포넌트를 루트로 고정. 생성 단계 및 에디터 런타임에서 서브오브젝트 동적 수정이 일어날때, ItemCollision(동적 편집 대상)을 루트로 두니까 각종 문제 발생(인스턴스 객체와 아키타입 객체 간 서브오브젝트 보유 구조가 달라서 발생하는 문제들. 서브오브젝트 변경이 일어났을때, 수정 전 컴포넌트가 삭제되지 않는 문제, ItemCollision 변경시 어태치된 자식 컴포넌트들 계층 트리 무너지는 문제 등)
+◎ 런타임 BeginPlay 단계 때, 필요에 따라 ItemCollision을 루트로 변경 & 어태치 자식 이전 -> Super::BeginPlay -> 아이템 액터 서브오브젝트들의 피직스 설정
+
+◎ 인벤토리 위젯: 공간 확보가 안되면 위젯이 가려지는 문제: 머티리얼에서 bDisableDepthTest= true
+
+아이템 액터 상호작용 딜레이 문제: 몬스터가 떨궈서 생긴 아이템 -> 오버랩 end부터 들어옴
+						
