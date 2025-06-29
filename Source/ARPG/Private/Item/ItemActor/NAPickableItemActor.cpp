@@ -31,7 +31,7 @@ void ANAPickableItemActor::BeginPlay()
 
 int32 ANAPickableItemActor::TryPerformAutoUse(AActor* User)
 {
-	if (!EnumHasAnyFlags(PickupMode, EPickupMode::PM_AutoUse)) return 0;
+	if (PickupMode != EPickupMode::PM_AutoUse) return 0;
 	
 	const int32 ConsumedQty = PerformAutoUse_Impl(User);
 	if (ConsumedQty > 0)

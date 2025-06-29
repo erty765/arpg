@@ -424,16 +424,23 @@ FNAInteractionResult UNAInteractionComponent::StratInteraction(FWeakInteractable
 			FText::FromString(TEXT(
 				"Interaction failed: Target interactable's pickup mode is invalid.")));
 		}
-		if (EnumHasAnyFlags(PickupMode, EPickupMode::PM_AutoUse))
+		if (PickupMode == EPickupMode::PM_AutoUse)
 		{
 			int32 AutoUseResult = PickableInteractable->TryPerformAutoUse(GetOwner());
-			if (AutoUseResult == -1)
+			if (AutoUseResult != 0)
 			{
 				return FNAInteractionResult::InteractionSucceeded(FText::FromString(TEXT(
 					"Item was automatically used and fully consumed.")));
 			}
+
+			// @TODO: AutoUse 후속 처리 어떻게 할지 고민하기 → 인벤토리 수납 가능? 들기 가능? 둘 다 불가?(이러면 Placeable 아이템과 다를게 없는데??)
+			
+			return FNAInteractionResult::InteractionFailed(
+				ENAInteractionFailureReason::IxFR_Unknown
+					, FText::FromString(TEXT(
+					"자동 사용 실패")));
 		}
-		if (EnumHasAnyFlags(PickupMode, EPickupMode::PM_Inventory))
+		else if (PickupMode == EPickupMode::PM_Inventory)
 		{
 			int32 AddResult = TryAddItemToInventory(PickableInteractable);
 			if (AddResult == 0)
@@ -456,7 +463,7 @@ FNAInteractionResult UNAInteractionComponent::StratInteraction(FWeakInteractable
 					"The item could not be added to your inventory. Requirements not met.")));
 			}
 		}
-		if (EnumHasAnyFlags(PickupMode, EPickupMode::PM_CarryOnly))
+		else if (PickupMode == EPickupMode::PM_CarryOnly)
 		{
 			if (PickableInteractable->GetClass()->IsChildOf<ANAWeapon>())
 			{
