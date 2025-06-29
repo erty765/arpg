@@ -380,4 +380,10 @@ if (!bNeedInitialize && bCanUsePostConstructLink)
 ◎ 인벤토리 위젯: 공간 확보가 안되면 위젯이 가려지는 문제: 머티리얼에서 bDisableDepthTest= true
 
 아이템 액터 상호작용 딜레이 문제: 몬스터가 떨궈서 생긴 아이템 -> 오버랩 end부터 들어옴
-						
+
+[06/29]
+◎ 포트폴리오 수정 사항: PickupMode 변경점 다시 써야 함.
+
+Pickup Mode 롤백: AutoUse-> 인벤x, 들기x, 상호작용 하자마자 자동 사용
+			  Inv두새교-> 인벤 수납만 가능
+			CarryOnly -> 들기만 가능						
