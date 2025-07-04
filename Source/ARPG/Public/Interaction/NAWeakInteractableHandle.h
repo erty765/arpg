@@ -6,26 +6,18 @@
 #include "NAWeakInteractableHandle.generated.h"
 
 // INAInteractableInterface 객체에 대한 약한 참조를 유지하는 래퍼 구조체. uproperty 대응
+
+
 USTRUCT(BlueprintType)
-struct FWeakInteractableHandle
-{
+struct FWeakInteractableHandle {
 	GENERATED_BODY()
 
-private:
-	// UObject 기반으로만 약한 참조를 보관 (UHT 지원)
-	UPROPERTY()
-	TWeakObjectPtr<UObject> ObjectPtr;
-
-public:
 	FWeakInteractableHandle() = default;
-	
 	FWeakInteractableHandle(std::nullptr_t InPtr) noexcept
-	: ObjectPtr(InPtr)
-	{
-	}
-	
+	: ObjectPtr(InPtr) {}
 	// TScriptInterface<INAInteractableInterface> 생성자
-	FWeakInteractableHandle(const TScriptInterface<INAInteractableInterface>& InInterface)
+	FWeakInteractableHandle(
+		const TScriptInterface<INAInteractableInterface>& InInterface)
 	{
 		INAInteractableInterface* InRawInterface = InInterface.GetInterface();
 		UObject* Obj = InRawInterface ? InRawInterface->_getUObject() : nullptr;
@@ -36,7 +28,6 @@ public:
 			check(ObjectPtr.IsValid() && ObjectPtr->Implements<UNAInteractableInterface>());
 		}
 	}
-
 	// INAInteractableInterface* 생성자 
 	FWeakInteractableHandle(INAInteractableInterface* InRawInterface)
 	{
@@ -47,7 +38,6 @@ public:
 			check(ObjectPtr.IsValid() && ObjectPtr->Implements<UNAInteractableInterface>());
 		}
 	}
-
 	FWeakInteractableHandle(AActor* InActor)
 	{
 		InActor && InActor->Implements<UNAInteractableInterface>()
@@ -55,18 +45,14 @@ public:
 				: ObjectPtr  = nullptr;
 	}
 
-
-	// 유효성 검사
 	bool IsValid() const
 	{
 		return ObjectPtr.IsValid() && ObjectPtr->Implements<UNAInteractableInterface>();
 	}
-	
 	const TWeakObjectPtr<UObject>& GetWeakObject() const
 	{
 		return ObjectPtr;
 	}
-
 	UObject* GetRawObject() const
 	{
 		return GetWeakObject().Get();
@@ -82,12 +68,10 @@ public:
 		}
 		return nullptr;
 	}
-
 	INAInteractableInterface* ToRawInterface() const
 	{
 		return ToScriptInterface().GetInterface();
 	}
-	
 	TWeakInterfacePtr<INAInteractableInterface> ToWeakInterface() const
 	{
 		return TWeakInterfacePtr<INAInteractableInterface>(ToRawInterface());
@@ -101,7 +85,6 @@ public:
 	{
 		return ToRawInterface() == Other;
 	}
-	
 	bool operator!=(const FWeakInteractableHandle& Other) const noexcept
 	{
 		return !(*this == Other);
@@ -111,6 +94,10 @@ public:
 		return !(*this == Other);
 	}
 	
+private:
+	// UObject 기반으로만 약한 참조를 보관 (UHT 지원)
+	UPROPERTY()
+	TWeakObjectPtr<UObject> ObjectPtr;
 };
 
 // 해시 함수 오버로드

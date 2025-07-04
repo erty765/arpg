@@ -52,10 +52,9 @@ EItemType UNAItemData::GetItemType() const
 	return EItemType::IT_None;
 }
 
-UClass* UNAItemData::GetItemActorClass() const
-{
-	if (const FNAItemBaseTableRow* ItemMetaData = GetItemMetaDataStruct())
-	{
+UClass* UNAItemData::GetItemActorClass() const {
+	if (const FNAItemBaseTableRow* ItemMetaData
+		= GetItemMetaDataStruct()) {
 		return ItemMetaData->ItemClass.Get();
 	}
 	return nullptr;
@@ -79,10 +78,9 @@ FText UNAItemData::GetItemDescription() const
 	return FText::GetEmpty();
 }
 
-class UTexture2D* UNAItemData::GetItemIcon() const
-{
-	if (const FNAItemBaseTableRow* ItemMetaData = GetItemMetaDataStruct())
-	{
+UTexture2D* UNAItemData::GetItemIcon() const {
+	if (const FNAItemBaseTableRow* ItemMetaData
+		= GetItemMetaDataStruct()) {
 		return ItemMetaData->IconAssetData.ItemIcon;
 	}
 	return nullptr;
@@ -141,33 +139,29 @@ bool UNAItemData::TryUseItem(AActor* User)
 	if (!CDO) return false;
 
 	bool bSucceed = false;
-	if (INAItemUseInterface* ItemUseInterface = Cast<INAItemUseInterface>(CDO))
-	{
+	if (INAItemUseInterface* ItemUseInterface = Cast<INAItemUseInterface>(CDO)) {
 		if (!ItemUseInterface->CanUseItem(this, User)) return false;
 		
 		int32 UsedAmount = 0;
 		bSucceed = ItemUseInterface->UseItem(this, User, UsedAmount);
-		if (bSucceed && UsedAmount > 0)
-		{
+		if (bSucceed && UsedAmount > 0) {
 			int32 PredictedQuantity = Quantity - UsedAmount;
 		
-			if (OwningInventory.IsValid())
-			{
-				// 인벤토리 위젯에 리드로우 해야하는 상황(아이템 수량 및 상태 변경 등)이면 인벤토리 컴포넌트에 위젯 리드로우 요청
-				// 수량이 0이하면 인벤토리 컴포넌트에서 아이템 데이터 제거까지 수행
+			if (OwningInventory.IsValid()) {
+				// 수량/상태 변경 시 인벤토리 위젯 갱신 요청
+				// 수량이 0이면 아이템 데이터 제거까지 처리
 				return OwningInventory->TryRemoveItem(ID, UsedAmount);
 			}
 			
-			if (PredictedQuantity <= 0)
-			{
-				// 인벤토리에 보관된 아이템이 아닌 경우, 아이템 엔진 서브시스템에 직접 아이템 데이터 & 아이템 액터까지 제거 요청
+			if (PredictedQuantity <= 0) {
+				// 아이템 수량이 0 이하일 때, 아이템 엔진 서브시스템에서 데이터와 액터를 완전히 제거
 				if (UNAItemEngineSubsystem::Get())
 				{
-					return UNAItemEngineSubsystem::Get()->DestroyRuntimeItemData(ID, true);
+					return UNAItemEngineSubsystem::Get()
+					->DestroyRuntimeItemData(ID, true);
 				}
 			}
-			else
-			{
+			else {
 				SetQuantity(PredictedQuantity);
 			}
 		}

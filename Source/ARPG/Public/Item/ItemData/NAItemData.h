@@ -119,20 +119,19 @@ protected:
 	TWeakObjectPtr<class UNAInventoryComponent> OwningInventory = nullptr;
 };
 
-template<typename ItemDataStructT> requires TIsDerivedFrom<ItemDataStructT, FNAItemBaseTableRow>::IsDerived
+template <typename ItemDataStructT>
+	requires TIsDerivedFrom<ItemDataStructT, FNAItemBaseTableRow>::IsDerived
 const ItemDataStructT* UNAItemData::GetItemMetaDataStruct() const
 {
-	if (ItemMetaDataHandle.IsNull())
-	{
+	if (ItemMetaDataHandle.IsNull()) return nullptr;
+	ItemDataStructT* ItemMetaDataStruct = ItemMetaDataHandle
+		.GetRow<ItemDataStructT>(ItemMetaDataHandle.RowName.ToString());
+	if (!ItemMetaDataStruct) {
+		UE_LOG(LogTemp, Warning, TEXT(
+			"[%hs] 아이템 메타데이터 읽기 실패. %s")
+			, __FUNCTION__, *ItemMetaDataHandle.ToDebugString());
 		return nullptr;
 	}
-
-	ItemDataStructT* ItemMetaDataStruct = ItemMetaDataHandle.GetRow<ItemDataStructT>(ItemMetaDataHandle.RowName.ToString());
-	if (!ItemMetaDataStruct)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[UNAItemData::GetItemMetaDataStruct]  아이템 메타 데이터 읽기 실패.  %s"), *ItemMetaDataHandle.ToDebugString());
-		return nullptr;
-	}
-
 	return ItemMetaDataStruct;
 }
+

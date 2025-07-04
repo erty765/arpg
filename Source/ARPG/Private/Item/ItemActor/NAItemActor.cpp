@@ -32,10 +32,6 @@ ANAItemActor::ANAItemActor(const FObjectInitializer& ObjectInitializer)
 	
 	TriggerSphere->SetRelativeLocation(FVector(0.f, 0.f, 140.f));
 	TriggerSphere->SetSphereRadius(280.0f);
-	// TriggerSphere->SetCollisionObjectType(ECollisionChannel::ECC_GameTraceChannel1);
-	// TriggerSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	// TriggerSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
-	//TriggerSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	TriggerSphere->SetCollisionProfileName(TEXT("IX_TriggerShape"));
 	TriggerSphere->CanCharacterStepUpOn = ECB_No;
 	TriggerSphere->SetSimulatePhysics(false);
@@ -238,46 +234,35 @@ EItemSubobjDirtyFlags ANAItemActor::GetDirtySubobjectFlags(const FNAItemBaseTabl
 void ANAItemActor::OnConstruction(const FTransform& Transform)
 {
  	Super::OnConstruction(Transform);
- 	
-	if (HasAnyFlags(RF_ClassDefaultObject))
-	{
-		return;
+	if (HasAnyFlags(RF_ClassDefaultObject)) return;
+	
+	// Child Actor인 경우: 새로운 아이템 데이터 인스턴스 생성 안함
+	if (!IsChildActor()
+		&& ItemDataID.IsNone() && !GetWorld()->IsPreviewWorld()) {
+		InitItemData();
 	}
 	
 	UNAItemEngineSubsystem* Subsystem = UNAItemEngineSubsystem::Get();
-	
-	if (!Subsystem || !Subsystem->IsItemMetaDataInitialized()
+    if (!Subsystem || !Subsystem->IsItemMetaDataInitialized()
 #if WITH_EDITOR
-		|| !Subsystem->IsRegisteredItemMetaClass(GetClass())
+	    || !Subsystem->IsRegisteredItemMetaClass(GetClass())
 #endif
-		)
-	{
-		return;
-	}
+    ) return;
 	
-	if (ItemDataID.IsNone() && !GetWorld()->IsPreviewWorld()
-		&& !IsChildActor()) // ChildActorComponent에 의해 생성된 경우: 아이템 데이터 새로 생성 x
-	{
-		InitItemData();
-	}
-
-	const FNAItemBaseTableRow* MetaData = UNAItemEngineSubsystem::Get()->GetItemMetaDataByClass(GetClass());
-	if (!MetaData) { return; }
-
+	const FNAItemBaseTableRow* MetaData
+		= UNAItemEngineSubsystem::Get()->GetItemMetaDataByClass(GetClass());
+	if (!MetaData) return;
+	// 메타데이터와 이 아이템 액터의 서브오브젝트 상태를 비교하여 수정해야할 사항을 플래그로 체크
 	const EItemSubobjDirtyFlags DirtyFlags = GetDirtySubobjectFlags( MetaData );
-
-	// 루트 컴포넌트 기준으로 재구성
-	USceneComponent* CandidateRootComponent = StubRootComponent;
-
-	EObjectFlags SubobjFlags = GetMaskedFlags(RF_PropagateToSubObjects);
-
+	
 	// Sanity Check: 콜리전 설정 또는 콜리전 생성 요청이 conflict하는 경우
 	check( !((!bNeedItemCollision) ^ (MetaData->CollisionShape == EItemCollisionShape::ICS_None)) );
-	
+	// 루트 컴포넌트 기준으로 재구성
+	USceneComponent* CandidateRootComponent = StubRootComponent;
+	EObjectFlags SubobjFlags = GetMaskedFlags(RF_PropagateToSubObjects);
 	// 아이템 콜리전은 처음에 만들어지지 않기 때문에 한번 체크
-	if ( bNeedItemCollision &&
-		 MetaData->CollisionShape != EItemCollisionShape::ICS_None &&
-		 ( EnumHasAnyFlags( DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionShape ) || !ItemCollision ) )
+	if ( bNeedItemCollision && MetaData->CollisionShape != EItemCollisionShape::ICS_None
+		 && (EnumHasAnyFlags( DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionShape ) || !ItemCollision))
 	{
 		switch (MetaData->CollisionShape)
 		{
@@ -516,14 +501,10 @@ bool ANAItemActor::ReplicateSubobjects( UActorChannel* Channel, FOutBunch* Bunch
 	return WroteSomething;
 }
 
-void ANAItemActor::InitItemData()
-{
-	if (HasValidItemID())
-	{
-		return;
-	}
-	
-	if (const UNAItemData* NewItemData = UNAItemEngineSubsystem::Get()->CreateItemDataByActor(this))
+void ANAItemActor::InitItemData() {
+	if (HasValidItemID()) return;
+	if (const UNAItemData* NewItemData
+		= UNAItemEngineSubsystem::Get()->CreateItemDataByActor(this))
 	{
 		ItemDataID = NewItemData->GetItemID();
 		VerifyInteractableData();
@@ -986,7 +967,7 @@ void ANAItemWidgetPopupActor::InitializePopup(UNAItemWidgetComponent* NewPopupWi
 		PopupWidgetComponent = NewPopupWidgetComponent;
 		AddInstanceComponent(PopupWidgetComponent);
 		PopupWidgetComponent->AttachToComponent(GetRootComponent(),FAttachmentTransformRules::KeepWorldTransform);
-		if (PopupWidgetComponent->HasBeenCreated())
+		if (!PopupWidgetComponent->HasBeenCreated())
 		{
 			PopupWidgetComponent->OnComponentCreated();
 		}

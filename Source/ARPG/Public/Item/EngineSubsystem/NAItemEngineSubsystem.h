@@ -57,86 +57,96 @@ public:
 
 	template<typename ItemDTRow_T = FNAItemBaseTableRow>
 		requires TIsDerivedFrom<ItemDTRow_T, FNAItemBaseTableRow>::IsDerived
-	const ItemDTRow_T* GetItemMetaDataByClass(UClass* InItemActorClass) const
-	{
-		if (!InItemActorClass->IsChildOf<ANAItemActor>())
-		{
-			return nullptr;
-		}
-		if (const FDataTableRowHandle* Value = ItemMetaDataMap.Find(InItemActorClass))
-		{
+	const ItemDTRow_T* GetItemMetaDataByClass(UClass* InItemActorClass) const {
+		if (!InItemActorClass->IsChildOf<ANAItemActor>()) return nullptr;
+		
+		if (const FDataTableRowHandle* Value = ItemMetaDataMap.Find(InItemActorClass)) {
 			return Value->GetRow<ItemDTRow_T>(Value->RowName.ToString());
 		}
 		return nullptr;
 	}
-
-	template<typename ItemActor_T = ANAItemActor>
-		requires TIsDerivedFrom< ItemActor_T, ANAItemActor>::IsDerived
+	
+	// template <typename ItemActor_T = ANAItemActor>
+	// 	requires TIsDerivedFrom<ItemActor_T, ANAItemActor>::IsDerived
+	// const UNAItemData* CreateItemDataByActor(ItemActor_T* InItemActor)
+	// {
+	// 	if (!InItemActor) return nullptr;
+	// 	const bool bIsCDOActor = InItemActor->HasAnyFlags(RF_ClassDefaultObject);
+	// 	if (!bIsCDOActor && !IsItemMetaDataInitialized()) return nullptr;
+	// 	// 아이템 메타데이터 검색
+	// 	UClass* InItemActorClass = InItemActor->GetClass();
+	// 	const TMap<TSubclassOf<ANAItemActor>, FDataTableRowHandle>::ValueType* ValuePtr
+	// 		= ItemMetaDataMap.Find(InItemActorClass);
+	// 	if (!ValuePtr) return nullptr;
+	// 	FDataTableRowHandle ItemMetaDTRowHandle = *ValuePtr;
+	// 	if (ItemMetaDTRowHandle.IsNull()) return nullptr;
+	// 	// 아이템 데이터 인스턴스 생성
+	// 	UNAItemData* NewItemData
+	// 		= NewObject<UNAItemData>(this, NAME_None, RF_Transient);
+	// 	if (!NewItemData) return nullptr;
+	// 	// 아이템 데이터 ID 초기화
+	// 	NewItemData->ItemMetaDataHandle = ItemMetaDTRowHandle;
+	// 	FString NameStr = ItemMetaDTRowHandle.RowName.ToString();
+	// 	FString CountStr = FString::FromInt(NewItemData->IDCount.GetValue());
+	// 	FString NewItemID = NameStr + TEXT("_") + CountStr;
+	// 	NewItemData->ID = FName(*NewItemID);
+	// 	// 런타임 아이템 데이터 추적을 위해 Map에 등록
+	// 	RuntimeItemDataMap.Emplace(NewItemData->ID, NewItemData);
+	// 	return RuntimeItemDataMap[NewItemData->ID].Get();
+	// }
+	
+	template <typename ItemActor_T = ANAItemActor>
+		requires TIsDerivedFrom<ItemActor_T, ANAItemActor>::IsDerived
 	const UNAItemData* CreateItemDataByActor(ItemActor_T* InItemActor)
 	{
-		if (!InItemActor)
-		{
-			ensureAlwaysMsgf(false, TEXT("[UNAItemEngineSubsystem::CreateItemDataByActor]  유효하지 않은 ItemActor를 전달받음."));
+		if (!InItemActor) {
+			ensureAlwaysMsgf(false, TEXT(
+				"[%hs] Invalid ItemActor provided"), __FUNCTION__);
 			return nullptr;
 		}
-		
 		const bool bIsCDOActor = InItemActor->HasAnyFlags(RF_ClassDefaultObject);
-		
-		if (!bIsCDOActor && !IsItemMetaDataInitialized())
-		{
-			ensureAlwaysMsgf(
-				false, TEXT("[UNAItemEngineSubsystem::CreateItemDataByActor]  아직도 아이템 메타데이터 매핑이 안되어있다고?? 어째서야"));
+		if (!bIsCDOActor && !IsItemMetaDataInitialized()) {
+			ensureAlwaysMsgf(false, TEXT(
+			"[%hs] Item metadata mapping not initialized"), __FUNCTION__);
 			return nullptr;
 		}
-		
+		// 아이템 메타데이터 검색
 		UClass* InItemActorClass = InItemActor->GetClass();
-
-		// 1) 아이템 메타데이터 검색
-		const TMap<TSubclassOf<ANAItemActor>, FDataTableRowHandle>::ValueType* ValuePtr = ItemMetaDataMap.Find(InItemActorClass);
-		if (!ValuePtr)
-		{
-			UE_LOG(LogTemp, Warning,
-			       TEXT("[UNAItemEngineSubsystem::CreateItemDataByActor]  ValuePtr was null."));
+		const TMap<TSubclassOf<ANAItemActor>, FDataTableRowHandle>::ValueType* ValuePtr
+			= ItemMetaDataMap.Find(InItemActorClass);
+		if (!ValuePtr) {
+			UE_LOG(LogTemp, Warning, TEXT(
+				"[%hs] ItemActorClass not found in ItemMetaDataMap: %s")
+				, __FUNCTION__, *InItemActorClass->GetName());
 			return nullptr;
 		}
 		FDataTableRowHandle ItemMetaDTRowHandle = *ValuePtr;
-		if (ItemMetaDTRowHandle.IsNull())
-		{
-			ensureAlwaysMsgf(
-				false,
-				TEXT(
-					"[UNAItemEngineSubsystem::CreateItemDataByActor]  ItemMetaDataMap에 등록되지 않은 ItemActorClass임.  %s"
-				), *InItemActorClass->GetName());
+		if (ItemMetaDTRowHandle.IsNull()) {
+			ensureAlwaysMsgf(false, TEXT(
+					"[%hs] ItemActorClass not registered in ItemMetaDataMap: %s"
+				), __FUNCTION__, *InItemActorClass->GetName());
 			return nullptr;
 		}
-
-		// 2) UNAItemData 객체 생성 및 초기화
-		UNAItemData* NewItemData = NewObject<UNAItemData>(this, NAME_None, RF_Transient);
-		if (!NewItemData)
-		{
-			ensureAlwaysMsgf(
-				false, TEXT("[UNAItemGameInstanceSubsystem::CreateItemDataByActor]  새로운 UNAItemData 객체 생성 실패"));
+		// 아이템 데이터 인스턴스 생성
+		UNAItemData* NewItemData
+			= NewObject<UNAItemData>(this, NAME_None, RF_Transient);
+		if (!NewItemData) {
+			ensureAlwaysMsgf(false, TEXT(
+					"[%hs] Failed to create UNAItemData object"), __FUNCTION__);
 			return nullptr;
 		}
-
+		// 아이템 데이터 ID 초기화
 		NewItemData->ItemMetaDataHandle = ItemMetaDTRowHandle;
-		FString NameStr;
-		// if (bIsCDOActor)
-		// {
-		// 	NameStr = TEXT("CDO_");
-		// }
-		NameStr += ItemMetaDTRowHandle.RowName.ToString();
+		FString NameStr = ItemMetaDTRowHandle.RowName.ToString();
 		FString CountStr = FString::FromInt(NewItemData->IDCount.GetValue());
 		FString NewItemID = NameStr + TEXT("_") + CountStr;
-
 		NewItemData->ID = FName(*NewItemID);
 
-		// 3) 새로 생성한 UNAItemData 객체의 소유권을 런타임 때 아이템 데이터 추적용 Map으로 이관
-		RuntimeItemDataMap.Emplace(NewItemData->ID, NewItemData);
-
-		UE_LOG(LogTemp, Warning, TEXT("[CreateItemDataByActor]  아이템 데이터 생성(%s) - 아이템 액터(%s)")
-			,*NewItemID, *InItemActor->GetName());
-		
+		// 런타임 아이템 데이터 맵에 등록
+		RuntimeItemDataMap.Emplace(NewItemData->ID, NewItemData); {
+			UE_LOG(LogTemp, Log, TEXT("[%hs] ItemData created: %s (Actor: %s)")
+				 , __FUNCTION__, *NewItemID, *InItemActor->GetName());
+		}
 		return RuntimeItemDataMap[NewItemData->ID].Get();
 	}
 

@@ -9,6 +9,14 @@
  *	캐릭터에서 아이템 사용 요청 -> 요청 받은 아이템에서 사용 처리(용법은 아이템 종류 별로 다름)
  */
 
+// UENUM(Blueprintable)
+// enum class EPickupMode : uint8
+// {
+// 	PM_Inventory  UMETA(DisplayName = "Inventory"),
+// 	PM_CarryOnly  UMETA(DisplayName = "Carry Only"),
+// 	PM_AutoUse    UMETA(DisplayName = "Auto Use"),
+// };
+
 UENUM(Blueprintable)
 enum class EPickupMode : uint8
 {
