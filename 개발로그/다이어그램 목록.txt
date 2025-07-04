@@ -1,0 +1,31 @@
+##PopupActor Flow Chart
+---
+config:
+  theme: base
+  layout: fixed
+---
+flowchart TD
+    A["ANAItemActor"] -- Before<br>Destroyed --> B["Detach<br>ItemWidgetComponent"]
+    B --> C["Spawn<br>ANAItemWidgetPopupActor"]
+    C --> D["Attach &amp; Register<br>Widget"]
+    D --> E["Play<br>Collapse Animation"]
+    E --> F["OnCollapseAnimationFinished<br>-&gt; Destroy"]
+
+
+## DataTable 로딩 및 UNAItemData 매핑 흐름도
+---
+config:
+  theme: base
+  layout: fixed
+---
+flowchart LR
+    A{"Engine<br>Initialization"} ==> B["UNAItemEngineSubsystem::Initialize"]
+    B --> C["Load UItemDataTablesAsset"]
+    C --> D["Iterate ItemDataTables"]
+    D --> E["Load DataTable"]
+    E --> F["Map SoftItemMetaData with ItemClass as Key"]
+    F --> G["Iterate SoftItemMetaData and Synchronously Load ItemClass"]
+    G --> H["Build ItemMetaDataMap with ItemClass as Key"]
+    H --> I["Blueprint CDO Dynamic Initialization & Compile"]
+    I ==> J{"Item Metadata Initialization Complete"}
+    
