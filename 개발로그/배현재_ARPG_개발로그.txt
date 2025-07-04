@@ -386,4 +386,13 @@ if (!bNeedInitialize && bCanUsePostConstructLink)
 
 Pickup Mode 롤백: AutoUse-> 인벤x, 들기x, 상호작용 하자마자 자동 사용
 			  Inv두새교-> 인벤 수납만 가능
-			CarryOnly -> 들기만 가능						
+			CarryOnly -> 들기만 가능
+
+[07/03]
+- AddInstanceComponent 생성자에서 제거
+  - 런타임에서 Hierarchy는 유지되지만 에디터상으로만 깨진 채로 나오는거라 에디터 로드 시점에서 에셋 전체 리컴파일을 돌림
+- PostInitProperties 이후에 컴포넌트들이 NULL로 CDO에 의해 초기화 되는 문제 해결 (Property에 Instanced를 넣음, 위 초기화 조건이 Transient이거나 Instanced이면 해당 복사가 발생하지 않음)
+- ItemCollision에서 Replicated 키워드 제거
+- Weapon: ItemMesh에 붙은 컴포넌트들 계층 관계가 블프 에디터 UI에 안뜸
+- BlueprintCompile에서 바뀐거만 업데이트
+- 기존에 루트 컴포넌트가 부모가 아닌 애들에 대해서 다 붙였었는데 생성자에서 만든 콜리전과 매시가 있으니까 자식이 알아서 붙이도록 책임 위임

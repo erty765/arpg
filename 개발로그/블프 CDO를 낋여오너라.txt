@@ -168,3 +168,14 @@ Default__BP_01_C: 0x524dc816e00
 (Name=Default__BP_01_C): 0x6619b02f500 
 (Name=Default__SKEL_BP_01_C): 0x6619b02e600
 (Name=Default__BP_01_C): 0x6619b029b00 >> ???? 왜 CDO 두번 생기냐
+
+!! 루트 컴포넌트 만들고 SetRootComponent에 바로 SubObject 만들어 넣으면 귀신이 산다 !!
+
+- BP 리컴파일시 Actor 스폰할때 Template으로 Old Object가 넘어가고 Class로 새로 만든 블루프린트 클래스가 넘어간다
+NewObject -> FObjectInitializer::InitProperties #4037 -> #4178
+				else if (P->IsInContainer(DefaultsClass))
+				{
+					P->CopyCompleteValue_InContainer(Obj, DefaultData);
+				}
+
+- AActor::RootComponent는 UPROPERTY가 붙어있어서 루트 컴포넌트는 사실상 강제로 패키지에 들어가 있어야 함 (다시 말해, CreateDefaultSubObject의 bTransient 플래그를 쓸 수가 없단 뜻)
