@@ -29,3 +29,159 @@ flowchart LR
     H --> I["Blueprint CDO Dynamic Initialization & Compile"]
     I ==> J{"Item Metadata Initialization Complete"}
     
+
+##
+ANAItemActor (Base)
+   ├── ANAPickableItemActor
+   │     ├── ANAMedPack
+   │     └── ANAUpgradeNode
+   └── ANAPlaceableItemActor
+          └── ANAPlaceableItemActor_Door
+
+##
+---
+config:
+  theme: base
+---
+flowchart TD
+    A[아이템 스폰 시] --> B[ANAItemActor OnConstruction]
+    B --> C[InitItemData 호출]
+    C --> D[UNAItemEngineSubsystem CreateItemDataByActor]
+    D --> E[ItemMetaDataMap 통해 메타데이터 연동]
+    E --> F[ItemDataID 할당]
+    F --> G[액터 초기화 완료]
+    H[아이템 사용 시] --> I[UNAItemData TryUseItem]
+    I --> J[ItemClass Get GetDefaultObject]
+    J --> K[CDO에서 INAItemUseInterface UseItem 호출]
+
+##
+---
+config:
+  theme: base
+  layout: elk
+---
+classDiagram
+    class ANAItemActor {
+        <<Abstract>>
+        +UShapeComponent* ItemCollision
+        +UMeshComponent* ItemMesh
+        +USphereComponent* TriggerSphere
+        +UNAItemWidgetComponent* ItemWidgetComponent
+        +UNAItemData* GetItemData()
+        +bool HasValidItemID()
+        +bool CanInteract()
+        +bool IsOnInteract()
+        +void NotifyInteractableFocusBegin()
+        +void NotifyInteractableFocusEnd()
+        +bool TryInteract()
+        +bool BeginInteract()
+        +bool ExecuteInteract()
+        +bool EndInteract()
+    }
+    class ANAPickableItemActor {
+        +EPickupMode PickupMode
+        +int32 TryPerformAutoUse()
+        +int32 PerformAutoUse_Impl()
+    }
+    class ANAPlaceableItemActor {
+        -- No specific members shown in .h but focus on environmental interaction --
+    }
+    class NAWeapon {
+        +UNAMontageCombatComponent* CombatComponent
+        +UAbilitySystemComponent* AbilitySystemComponent
+        +UNiagaraComponent* MuzzleFlashComponent
+        +UNAAmmoIndicatorComponent* AmmoIndicatorComponent
+        +EFireArmType FireArmType
+        +EFireArmType GetFireArmType()
+        +UAbilitySystemComponent* GetAbilitySystemComponent()
+    }
+    class NAMedpack {
+        +EMedPackGrade MedPackGrade
+        +bool CanUseItem()
+        +bool UseItem()
+        +EMedPackGrade GetMedPackGrade()
+    }
+    class NAPlaceableItemActor_Door {
+        +UStaticMeshComponent* Door1
+        +UStaticMeshComponent* Door2
+        +EDoorType DoorType
+        +double MoveDist
+        +bool bIsLocked
+        +bool bIsOpened
+        +void ToggleDoor()
+    }
+    class NAButtonSwitch {
+        +ANAPlaceableItemActor* TargetToActive
+        +bool bIsActive
+    }
+    ANAItemActor <|-- ANAPickableItemActor
+    ANAItemActor <|-- ANAPlaceableItemActor
+    ANAPickableItemActor <|-- NAWeapon
+    ANAPickableItemActor <|-- NAMedpack
+    ANAPlaceableItemActor <|-- NAPlaceableItemActor_Door
+    ANAPlaceableItemActor <|-- NAButtonSwitch
+    ANAPickableItemActor : Responsible for inventory acquisition and management.
+    ANAPlaceableItemActor : Responsible for world placement and environmental interaction.
+    ANAItemActor : Provides common visual, physics, and interaction components.
+
+##
+---
+config:
+  theme: base
+  layout: elk
+---
+classDiagram
+    class ANAItemActor {
+        <<Abstract>>
+        +ItemCollision: UShapeComponent
+        +ItemMesh: UMeshComponent
+        +TriggerSphere: USphereComponent
+        +ItemWidgetComponent: UNAItemWidgetComponent
+        +GetItemData()
+        +CanInteract()
+        +TryInteract()
+        +NotifyFocusBegin/End()
+    }
+    class ANAPickableItemActor {
+        +PickupMode: EPickupMode
+        +TryPerformAutoUse()
+    }
+    class ANAPlaceableItemActor {
+        + InteractableType
+        +Implements ExecuteInteract()
+    }
+    class NAWeapon {
+        +CombatComponent: UNAMontageCombatComponent
+        +AbilitySystemComponent: UAbilitySystemComponent
+        +MuzzleFlashComponent: UNiagaraComponent
+        +AmmoIndicatorComponent: UNAAmmoIndicatorComponent
+        +FireArmType: EFireArmType
+        +GetFireArmType()
+    }
+    class NAMedpack {
+        +MedPackGrade: EMedPackGrade
+        +CanUseItem()
+        +UseItem()
+    }
+    class NAPlaceableItemActor_Door {
+        +Door1: UStaticMeshComponent
+        +Door2: UStaticMeshComponent
+        +DoorType: EDoorType
+        +MoveDist: double
+        +ToggleDoor()
+    }
+    class NAButtonSwitch {
+        +TargetToActive: ANAPlaceableItemActor*
+        +bIsActive: bool
+    }
+    ANAItemActor <|-- ANAPickableItemActor
+    ANAItemActor <|-- ANAPlaceableItemActor
+    ANAPickableItemActor <|-- NAWeapon
+    ANAPickableItemActor <|-- NAMedpack
+    ANAPlaceableItemActor <|-- NAPlaceableItemActor_Door
+    ANAPlaceableItemActor <|-- NAButtonSwitch
+    note for ANAItemActor "월드 아이템 기본,<br>시각/충돌/상호작용 제공"
+    note for ANAPickableItemActor "획득 가능 아이템<br>(인벤토리/자동사용/들기) 담당"
+    note for ANAPlaceableItemActor "배치 가능 아이템<br>(환경 상호작용) 담당"
+
+
