@@ -1,0 +1,645 @@
+## NAPickableItemActor.h
+
+#pragma once
+
+#include "Item/ItemActor/NAItemActor.h"
+#include "NAPickableItemActor.generated.h"
+
+/**
+ *	@notice	아이템 상호작용 != 아이템 사용 (e.g. 물약 줍기 != 물약 사용) => 아이템 상호작용 입력 키 != 아이템 사용 입력 키
+ *	캐릭터에서 아이템 상호작용 요청 -> 요청 받은 아이템에서 상호작용 처리(상호작용 내용은 아이템 종류 별로 다름)
+ *	캐릭터에서 아이템 사용 요청 -> 요청 받은 아이템에서 사용 처리(용법은 아이템 종류 별로 다름)
+ */
+
+UENUM(Blueprintable, meta=(Bitflags))
+enum class EPickupMode : uint8
+{
+	PM_None        = 0 UMETA(DisplayName = "None"),
+
+	// 인벤토리에 "들어갈 수 있는" 아이템
+	// PM_Holdable 플래그의 여부에 따라: 1. 바로 인벤토리로 물리적 이동(아이템 액터 파괴) / 2. 인벤토리에 적재되긴 하나 캐릭터의 메쉬에 어태치되어 사용 대기 상태가 됨
+	PM_Inventory   = 1 << 0 UMETA(DisplayName = "Inventory"),
+	
+	// 줍기는 가능하지만 인벤토리에 못 들어가는 아이템. "들고 있기"만 가능. 캐릭터의 양쪽 손의 어태치 상황에 따라 줍기가 거부될 수 있음
+	// @TODO: '들고 있기'는 전용 애니메이션이 필요할 수 있음. '들고 있기' 상태일 때, 상호작용 버튼의 동작: 내려놓기. '들고 있는 아이템 사용(들고 있기 상태일 때만 활성)' 전용 입력 키 추가 필요
+	PM_CarryOnly   = 1 << 1 UMETA(DisplayName = "Carry Only"),
+
+	// 줍자마자 자동 사용되는 아이템	(인벤토리 적재 가능 여부와 상관 없음)
+	// 이 경우 아이템 사용 키는 활성되지 않음
+	// PM_Inventory | PM_AutoUse -> 인벤토리에 아이템을 이동시키기 전에 자동 사용부터 시도함
+	PM_AutoUse     = 1 << 2 UMETA(DisplayName = "Auto Use"),
+};
+ENUM_CLASS_FLAGS(EPickupMode)
+
+// Pickable Item Actor: 아이템 상호작용이 "줍기"인 아이템 액터 (줍기 모드는 @see EPickupMode)
+UCLASS(Abstract)
+class ARPG_API ANAPickableItemActor : public ANAItemActor
+{
+	GENERATED_BODY()
+
+public:
+	ANAPickableItemActor(const FObjectInitializer& ObjectInitializer);
+	
+	virtual void PostRegisterAllComponents() override;
+	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void PostInitializeComponents() override;
+
+protected:
+	virtual void BeginPlay() override;
+	
+//======================================================================================================================
+// Interactable Interface Implements
+//======================================================================================================================
+public:
+	virtual bool CanInteract_Implementation() const override;
+
+protected:
+	virtual void SetInteractionPhysicsEnabled(const bool bEnabled) override;
+	
+//======================================================================================================================
+// Pickable Item Actor Operations
+//======================================================================================================================
+public:
+	UFUNCTION(BlueprintCallable, Category = "Pickable Item")
+	FORCEINLINE EPickupMode GetPickupMode() const
+	{
+		return 	PickupMode;
+	}
+	
+	// @return	자동 사용 때 소비한 수량
+	//			-> -1이면 전부 소비 후 이 액터 destroy까지 끝냄
+	//			-> 0이면 사용 실패, 0>이면 사용 성공
+	UFUNCTION(BlueprintCallable, Category = "Pickable Item")
+	int32 TryPerformAutoUse(AActor* User);
+
+protected:
+	// 오버라이딩 시 주의사항: 자동 사용의 결과로 아이템 수량에 변화가 있다면,
+	//					   이 함수 내에서 SetQuantity를 호출하지 말고, 소비한 수량을 반환값으로 설정하기
+	//					   수량 변화에 따른 후처리는 TryPerformAutoUse에서 실행되어야 함
+	// @return	자동 사용 때 소비한 수량
+	//			-> 0이면 사용 실패, 0>이면 사용 성공
+	virtual int32 PerformAutoUse_Impl(AActor* User);
+	
+protected:
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category="Pickable Item")
+	EPickupMode PickupMode = EPickupMode::PM_None;
+};
+
+----------------------------------------------------------------------------------------------------------------------
+
+## NAPickableItemActor.cpp
+
+#include "Item/ItemActor/NAPickableItemActor.h"
+
+#include "Components/SphereComponent.h"
+#include "Interaction/NAInteractionComponent.h"
+#include "Item/ItemWidget/NAItemWidgetComponent.h"
+
+ANAPickableItemActor::ANAPickableItemActor(const FObjectInitializer& ObjectInitializer)
+	:Super(ObjectInitializer)
+{
+}
+
+void ANAPickableItemActor::PostRegisterAllComponents()
+{
+	Super::PostRegisterAllComponents();
+}
+
+void ANAPickableItemActor::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+}
+
+void ANAPickableItemActor::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+}
+
+void ANAPickableItemActor::BeginPlay()
+{
+	Super::BeginPlay();
+}
+
+int32 ANAPickableItemActor::TryPerformAutoUse(AActor* User)
+{
+	if (!EnumHasAnyFlags(PickupMode, EPickupMode::PM_AutoUse)) return 0;
+	
+	const int32 ConsumedQty = PerformAutoUse_Impl(User);
+	if (ConsumedQty > 0)
+	{
+		int32 CurrQty = GetItemData()->GetQuantity();
+		if (CurrQty - ConsumedQty <= 0)
+		{
+			// 자동 사용 후 아이템 다 씀 -> 이 액터 인스턴스 & 아이템 데이터 제거
+			if (UNAItemEngineSubsystem::Get()->DestroyRuntimeItemData(GetItemData()))
+			{
+				Destroy();
+				return -1;
+			}
+		}
+		else
+		{
+			GetItemData()->SetQuantity(CurrQty - ConsumedQty);
+		}
+	}
+	return ConsumedQty;
+}
+
+int32 ANAPickableItemActor::PerformAutoUse_Impl(AActor* User)
+{
+	return 0;
+}
+
+bool ANAPickableItemActor::CanInteract_Implementation() const
+{
+	return Super::CanInteract_Implementation() && PickupMode != EPickupMode::PM_None;
+}
+
+void ANAPickableItemActor::SetInteractionPhysicsEnabled(const bool bEnabled)
+{
+	if (!ensureAlways(Execute_IsOnInteract(this))) return;
+	
+	if (!bEnabled)
+	{
+		if (ItemCollision)
+		{
+			ItemCollision->SetSimulatePhysics(false);
+			ItemCollision->SetGenerateOverlapEvents(false);
+			ItemCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			ItemCollision->Deactivate();
+		}
+		if (TriggerSphere)
+		{
+			TriggerSphere->SetGenerateOverlapEvents(false);
+			TriggerSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			TriggerSphere->Deactivate();
+		}
+		
+		CollapseItemWidgetComponent();
+	}
+	else
+	{
+		if (ItemCollision)
+		{
+			if ( HasAuthority() )
+			{
+				ItemCollision->SetSimulatePhysics(true);	
+			}
+			
+			ItemCollision->SetGenerateOverlapEvents(true);
+			ItemCollision->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+			ItemCollision->Activate();
+		}
+		if (TriggerSphere)
+		{
+			TriggerSphere->SetGenerateOverlapEvents(true);
+			TriggerSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+			TriggerSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
+			TriggerSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+			TriggerSphere->Activate();
+		}
+	}
+}
+
+// void ANAPickableItemActor::EndInteract_Implementation(AActor* Interactor)
+// {
+// 	Super::EndInteract_Implementation(Interactor);
+// 	
+// 	UNAInteractionComponent* InteractComp = GetInteractionComponent(Interactor);
+// 	if (!ensureAlways(IsValid(InteractComp))) return;
+// 	
+// 	// 아이템 드랍?
+// 	// 아이템이 부착이 되어 있는 경우
+// 	if ( GetParentActor() == Interactor )
+// 	{
+// 		FActorSpawnParameters SpawnParams;
+// 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+// 		SpawnParams.Owner = nullptr;
+// 		SpawnParams.Template = this;
+// 		SpawnParams.bNoFail = true;
+// 	
+// 		const FVector SpawnLocation = GetActorLocation();
+// 		const FRotator SpawnRotation = FRotator::ZeroRotator;
+// 		const AActor* Spawned = GetWorld()->SpawnActor( GetClass(), &SpawnLocation, &SpawnRotation, SpawnParams );
+// 		check( Spawned );
+// 	
+// 		// ChildActorComponent에 의해 만들어진 액터인 경우
+// 		// 부착되어 있던 아이템을 파괴 ( = 자신을 파괴 )
+// 		if ( UChildActorComponent* ChildActorComponent = Cast<UChildActorComponent>( GetParentComponent() ) )
+// 		{
+// 			ChildActorComponent->DestroyChildActor();
+// 			ChildActorComponent->SetChildActorClass( nullptr );
+// 		}
+// 		else
+// 		{
+// 			// 아니면 새로 스폰된 아이템에게 유산을 넘겨줌
+// 			Destroy();
+// 		}
+// 	}
+//
+// 	if (!IsPendingKillPending())
+// 	{
+// 		TriggerSphere->SetGenerateOverlapEvents(true);
+// 	}
+// }
+
+----------------------------------------------------------------------------------------------------------------------
+
+## NAWeapon.h
+
+// Fill out your copyright notice in the Description page of Project Settings.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "AbilitySystemInterface.h"
+#include "Item/ItemActor/NAPickableItemActor.h"
+#include "GameFramework/Actor.h"
+#include "PhysicsEngine/PhysicsConstraintComponent.h"
+#include "NAWeapon.generated.h"
+
+enum class EFireArmType : uint8;
+class UNAAmmoIndicatorComponent;
+class UGameplayEffect;
+class UNiagaraComponent;
+class UNAMontageCombatComponent;
+
+UCLASS(Abstract)
+class ARPG_API ANAWeapon : public ANAPickableItemActor, public IAbilitySystemInterface
+{
+	GENERATED_BODY()
+
+	friend class UNAItemEngineSubsystem;
+	friend struct FCombatUpdatePredication;
+
+	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Replicated, Category="Combat", meta=(AllowPrivateAccess="true"))
+	UNAMontageCombatComponent* CombatComponent;
+
+	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Replicated, Category="Combat", meta=(AllowPrivateAccess="true"))
+	UAbilitySystemComponent* AbilitySystemComponent;
+
+	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category="FX", meta=(AllowPrivateAccess="true"))
+	UNiagaraComponent* MuzzleFlashComponent;
+
+	UPROPERTY( EditDefaultsOnly, BlueprintReadOnly, Category="Widget", meta=(AllowPrivateAccess="true"))
+	UNAAmmoIndicatorComponent* AmmoIndicatorComponent;
+
+	UPROPERTY( VisibleAnywhere, BlueprintReadOnly, Category="Combat", meta=(AllowPrivateAccess="true") )
+	EFireArmType FireArmType;
+
+	FTransform PreviousParentComponentTransform;
+
+public:
+	// Sets default values for this actor's properties
+	ANAWeapon();
+
+	UFUNCTION(BlueprintCallable)
+	EFireArmType GetFireArmType() const;
+	
+	FORCEINLINE virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override { return AbilitySystemComponent; }
+
+protected:
+	// Called when the game starts or when spawned
+	virtual void BeginPlay() override;
+	
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	virtual void OnConstruction(const FTransform& Transform) override;
+
+	virtual void ReplaceRootWithItemCollisionIfNeeded() override;
+
+public:
+	// Called every frame
+	virtual void Tick( float DeltaTime ) override;
+};
+
+----------------------------------------------------------------------------------------------------------------------
+
+## NAWeapon.cpp
+
+// Fill out your copyright notice in the Description page of Project Settings.
+
+
+#include "Item/PickableItem//NAWeapon.h"
+
+#include "AbilitySystemComponent.h"
+#include "NiagaraComponent.h"
+#include "Abilities/GameplayAbility.h"
+#include "Combat/ActorComponent/NAMontageCombatComponent.h"
+#include "Item/ItemDataStructs/NAWeaponDataStructs.h"
+#include "Net/UnrealNetwork.h"
+#include "Weapon/WidgetComponent/NAAmmoIndicatorComponent.h"
+#include "Components/ShapeComponent.h"
+
+// Sets default values
+ANAWeapon::ANAWeapon() : ANAPickableItemActor(FObjectInitializer::Get())
+{
+	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
+	PrimaryActorTick.bCanEverTick = true;
+
+	CombatComponent = CreateDefaultSubobject<UNAMontageCombatComponent>( TEXT("CombatComponent") );
+	// 무기가 캐릭터의 Child Actor로 부착될 것이기에 CombatComponent의 설정이 Parent Actor로 가도록
+	CombatComponent->SetConsiderChildActor( true );
+
+	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>( TEXT("AbilitySystemComponent") );
+	MuzzleFlashComponent = CreateDefaultSubobject<UNiagaraComponent>( TEXT( "MuzzleFlashComponent") );
+	MuzzleFlashComponent->SetAutoActivate( false );
+
+	AmmoIndicatorComponent = CreateDefaultSubobject<UNAAmmoIndicatorComponent>( TEXT("AmmoIndicatorComponent") );
+	// 플레이어를 바라보도록
+	AmmoIndicatorComponent->SetRelativeRotation( {0.f, -90.f, 0.f} );
+	AmmoIndicatorComponent->SetRelativeLocation( {0.f, 0.f, 10.f} );
+	
+	PickupMode = EPickupMode::PM_Inventory;
+
+	if ( ItemMesh )
+	{
+		AmmoIndicatorComponent->SetupAttachment( ItemMesh,TEXT("Indicator") );
+		MuzzleFlashComponent->SetupAttachment( ItemMesh,TEXT( "Muzzle" ) );
+	}
+}
+
+EFireArmType ANAWeapon::GetFireArmType() const
+{
+	return FireArmType;
+}
+
+// Called when the game starts or when spawned
+void ANAWeapon::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// 몽타주랑 공격이 설정되어 있는지 확인
+	check( CombatComponent->GetMontage() && CombatComponent->GetAttackAbility() );
+	CombatComponent->SetActive( true );
+
+	MuzzleFlashComponent->SetCollisionEnabled( ECollisionEnabled::NoCollision );
+	MuzzleFlashComponent->SetGenerateOverlapEvents( false );
+
+	AmmoIndicatorComponent->SetCollisionEnabled( ECollisionEnabled::NoCollision );
+	AmmoIndicatorComponent->SetGenerateOverlapEvents( false );
+	
+	MuzzleFlashComponent->SetActive( false );
+
+	// 서버에서 막 ChildActorComponent에 의해 스폰된 경우
+	if ( HasAuthority() )
+	{
+		if ( USceneComponent* ParentActorComponent = GetParentComponent() )
+		{
+			if ( AActor* OwningActor = ParentActorComponent->GetOwner() )
+			{
+				SetOwner( OwningActor );
+
+				if ( const FNAWeaponTableRow* WeaponTable = static_cast<const FNAWeaponTableRow*>( UNAItemEngineSubsystem::Get()->GetItemMetaDataByClass( GetClass() ) ) )
+				{
+					// 부착된 상태에서 오프셋 조정
+					// 액터는 초기에 생성된 시점에서 ChildActorComponent에 부착된 상태가 아니라서
+					// 설정한 상대 위치가 소실되므로 대신에 ChildActorComponent의 상대 위치를 조정.
+					PreviousParentComponentTransform = ParentActorComponent->GetRelativeTransform();
+					ParentActorComponent->SetRelativeTransform( WeaponTable->AttachmentTransform );
+				}
+			}
+		}
+	}
+	else
+	{
+		if ( AActor* Actor = GetAttachParentActor() )
+		{
+			AbilitySystemComponent->InitAbilityActorInfo( Actor, this );
+		}
+	}
+}
+
+void ANAWeapon::EndPlay( const EEndPlayReason::Type EndPlayReason )
+{
+	Super::EndPlay( EndPlayReason );
+
+	if ( USceneComponent* ParentActorComponent = GetParentComponent() )
+	{
+		ParentActorComponent->SetRelativeTransform( PreviousParentComponentTransform );
+	}
+}
+
+void ANAWeapon::GetLifetimeReplicatedProps( TArray<FLifetimeProperty>& OutLifetimeProps ) const
+{
+	Super::GetLifetimeReplicatedProps( OutLifetimeProps );
+	DOREPLIFETIME( ANAWeapon, CombatComponent );
+	DOREPLIFETIME( ANAWeapon, AbilitySystemComponent );
+}
+
+void ANAWeapon::OnConstruction( const FTransform& Transform )
+{
+	Super::OnConstruction( Transform );
+	
+	if ( const FNAWeaponTableRow* WeaponTable = static_cast<const FNAWeaponTableRow*>( UNAItemEngineSubsystem::Get()->GetItemMetaDataByClass( GetClass() ) ) )
+	{
+		FireArmType = WeaponTable->FirearmStatistics.FireArmType;
+	}
+}
+
+void ANAWeapon::ReplaceRootWithItemCollisionIfNeeded()
+{
+	Super::ReplaceRootWithItemCollisionIfNeeded();
+
+	// if ( ItemMesh )
+	// {
+	// 	AmmoIndicatorComponent->AttachToComponent( ItemMesh, FAttachmentTransformRules::KeepRelativeTransform, TEXT("Indicator") );
+	// 	MuzzleFlashComponent->AttachToComponent( ItemMesh, FAttachmentTransformRules::KeepRelativeTransform, TEXT( "Muzzle" ) );
+	// }
+}
+
+// Called every frame
+void ANAWeapon::Tick( float DeltaTime )
+{
+	Super::Tick( DeltaTime );
+}
+
+----------------------------------------------------------------------------------------------------------------------
+
+## NAMedPack.h
+
+// Fill out your copyright notice in the Description page of Project Settings.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Item/ItemActor/NAPickableItemActor.h"
+#include "Item/ItemDataStructs/NARecoveryPackDataStructs.h"
+#include "NAMedPack.generated.h"
+
+UCLASS(Abstract)
+class ARPG_API ANAMedPack : public ANAPickableItemActor
+{
+	GENERATED_BODY()
+
+public:
+	// Sets default values for this actor's properties
+	ANAMedPack(const FObjectInitializer& ObjectInitializer);
+
+protected:
+	// Called when the game starts or when spawned
+	virtual void BeginPlay() override;
+
+public:
+	// Called every frame
+	virtual void Tick(float DeltaTime) override;
+
+//======================================================================================================================
+// Interactable Interface Implements
+//======================================================================================================================
+public:
+	//virtual void BeginInteract_Implementation(AActor* Interactor) override;
+	//virtual bool ExecuteInteract_Implementation(AActor* Interactor) override;
+	//virtual void EndInteract_Implementation(AActor* Interactor) override;
+
+	
+//======================================================================================================================
+// Item Use Interface Implements
+//======================================================================================================================
+public:
+	virtual bool CanUseItem(UNAItemData* InItemData, AActor* User) const override;
+	virtual bool UseItem(UNAItemData* InItemData, AActor* User, int32& UsedAmount) const override;
+
+	EMedPackGrade GetMedPackGrade() const;
+
+protected:
+	UPROPERTY(VisibleAnywhere)
+	class UArrowComponent* TestArrowComponent;
+};
+
+----------------------------------------------------------------------------------------------------------------------
+
+## NAMedPack.cpp
+
+// Fill out your copyright notice in the Description page of Project Settings.
+
+
+#include "Item/PickableItem/NAMedPack.h"
+
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemInterface.h"
+#include "HP/GameplayEffect/NAGE_Damage.h"
+#include "HP/GameplayEffect/NAGE_Heal.h"
+#include "Item/ItemDataStructs/NARecoveryPackDataStructs.h"
+#include "NACharacter.h"
+#include "NAPlayerState.h"
+#include "Components/ArrowComponent.h"
+#include "Components/ShapeComponent.h"
+
+
+// Sets default values
+ANAMedPack::ANAMedPack(const FObjectInitializer& ObjectInitializer)
+	:Super(ObjectInitializer)
+{
+	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
+	PrimaryActorTick.bCanEverTick = true;
+
+	PickupMode = EPickupMode::PM_Inventory;
+
+	TestArrowComponent = CreateDefaultSubobject<UArrowComponent>(TEXT("TestArrow"));
+	if (ItemCollision)
+	{
+		TestArrowComponent->SetupAttachment(ItemCollision);
+	}
+}
+
+// Called when the game starts or when spawned
+void ANAMedPack::BeginPlay()
+{
+	Super::BeginPlay();
+}
+
+// Called every frame
+void ANAMedPack::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+}
+
+bool ANAMedPack::CanUseItem(UNAItemData* InItemData, AActor* User) const
+{
+	ANACharacter* Character = Cast<ANACharacter>(User);
+	if (!Character) return false;
+	const ANAPlayerState* PlayerState = Character->GetPlayerState<ANAPlayerState>();
+	if (!PlayerState) return false;
+
+	int32 MaxHealth = PlayerState->GetMaxHealth();
+	float CurrentHealth = PlayerState->GetHealth();
+	
+	return !FMath::IsNearlyEqual(CurrentHealth, MaxHealth);
+}
+
+bool ANAMedPack::UseItem(UNAItemData* InItemData, AActor* User, int32& UsedAmount) const
+{
+	Super::UseItem(InItemData, User,UsedAmount);
+
+	if (!InItemData || !User) return false;
+	if (InItemData->GetItemActorClass() != GetClass()) return false;
+
+	if (const FNARecoveryPackTableRow* RecoveryPackData = InItemData->GetItemMetaDataStruct<FNARecoveryPackTableRow>())
+	{
+		float RecoveryAmount = RecoveryPackData->RecoveryAmount;
+		if (RecoveryPackData->bIsPercentRecovery)
+		{
+			RecoveryAmount *= RecoveryPackData->RecoveryFactor;
+		}
+		// @TODO: 회복팩 사용 로직 -> User의 체력 스탯 끌고 오기
+		if ( const TScriptInterface<IAbilitySystemInterface>& Interface = User )
+		{
+			// 체력 Attribute의 값을 증가시켜서 회복시키는 방법
+			// GameplayTag를 Heal이랑 Damage에 붙여서 써야할듯
+			const FGameplayEffectContextHandle& Handle = Interface->GetAbilitySystemComponent()->MakeEffectContext();
+			const FGameplayEffectSpecHandle& SpecHandle = Interface->GetAbilitySystemComponent()->MakeOutgoingSpec
+			(
+				UNAGE_Heal::StaticClass(),
+				RecoveryAmount, // todo: 메디팩 퀄리티에 따른 힐 증가 수치 배수 설정
+				Handle
+			);
+			SpecHandle.Data->SetSetByCallerMagnitude
+			(
+				FGameplayTag::RequestGameplayTag( TEXT( "Data.Heal" ) ),
+				RecoveryPackData->RecoveryAmount
+			);
+			const FActiveGameplayEffectHandle& EventResult = Interface->GetAbilitySystemComponent()->ApplyGameplayEffectSpecToSelf( *SpecHandle.Data.Get() );
+			EventResult.WasSuccessfullyApplied() ? UsedAmount = 1 : UsedAmount = 0;
+			return EventResult.WasSuccessfullyApplied(); // 성공 했냐? 안했냐?
+			
+			// 데미지 효과를 제거해서 힐을 하는 방법이 이거고
+			// 현실적으로 데미지와 힐이 등가교환이 되는 경우는 거의 드물기에...
+			// FGameplayEffectQuery Query;
+			// Query.EffectDefinition = UNAGE_Damage::StaticClass();
+			// const int32 Removed = Interface->GetAbilitySystemComponent()->RemoveActiveEffects( Query, 1 );
+		}
+	}
+	return false;
+}
+
+EMedPackGrade ANAMedPack::GetMedPackGrade() const
+{
+	if (GetItemData())
+	{
+		if (const FNARecoveryPackTableRow* RecoveryDataStructs = GetItemData()->GetItemMetaDataStruct<FNARecoveryPackTableRow>())
+		{
+			return RecoveryDataStructs->MedPackGrade;
+		}
+	}
+
+	return EMedPackGrade::MPG_None;
+}
+
+// void ANAMedPack::BeginInteract_Implementation(AActor* Interactor)
+// {
+// 	Super::BeginInteract_Implementation(Interactor);
+// }
+
+// bool ANAMedPack::ExecuteInteract_Implementation(AActor* Interactor)
+// {
+// 	return Super::ExecuteInteract_Implementation(Interactor);
+// }
+
+// void ANAMedPack::EndInteract_Implementation(AActor* Interactor)
+// {
+// 	Super::EndInteract_Implementation(Interactor);
+// }
+

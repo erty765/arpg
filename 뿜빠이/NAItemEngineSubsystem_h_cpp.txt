@@ -1,0 +1,541 @@
+## NAItemEngineSubsystem.h
+
+// Fill out your copyright notice in the Description page of Project Settings.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Subsystems/EngineSubsystem.h"
+#include "Item/ItemData/NAItemData.h"
+#include "EngineUtils.h"
+#include "NAItemEngineSubsystem.generated.h"
+
+UCLASS(BlueprintType)
+class UItemDataTablesAsset : public UDataAsset
+{
+	GENERATED_BODY()
+
+public:
+	// 에디터에서 드래그&드롭으로 DataTable을 넣을 수 있음
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TArray<TSoftObjectPtr<UDataTable>> ItemDataTables;
+};
+
+class ANAItemActor;
+struct FNAInventorySlot;
+
+UCLASS()
+class ARPG_API UNAItemEngineSubsystem : public UEngineSubsystem
+{
+	GENERATED_BODY()
+
+public:
+	UNAItemEngineSubsystem();
+	
+protected:
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
+	
+public:
+#if WITH_EDITOR
+	bool IsRegisteredItemMetaClass(UClass* ItemClass) const;
+	void RegisterNewItemMetaData(UClass* NewItemClass, const UDataTable* InDataTable, const FName InRowName);
+	void VerifyItemMetaDataRowHandle(UClass* ItemClass, const UDataTable* InDataTable, const FName InRowName);
+#endif
+	
+	static UNAItemEngineSubsystem* Get()
+	{
+		if (GEngine)
+		{
+			return GEngine->GetEngineSubsystem<UNAItemEngineSubsystem>();
+		}
+		
+		return nullptr;
+	}
+	
+	FORCEINLINE bool IsItemMetaDataInitialized() const {
+		return bSoftMetaDataInitialized && bMetaDataInitialized;
+	}
+
+	template<typename ItemDTRow_T = FNAItemBaseTableRow>
+		requires TIsDerivedFrom<ItemDTRow_T, FNAItemBaseTableRow>::IsDerived
+	const ItemDTRow_T* GetItemMetaDataByClass(UClass* InItemActorClass) const
+	{
+		if (!InItemActorClass->IsChildOf<ANAItemActor>()) return nullptr;
+		if (!IsSoftItemMetaDataInitialized()) return nullptr;
+		
+		UClass* Key = InItemActorClass;
+#if WITH_EDITOR || WITH_EDITORONLY_DATA
+		if (UBlueprintGeneratedClass* BPClass = Cast<UBlueprintGeneratedClass>(InItemActorClass))
+		{
+			if (UBlueprint* BP = Cast<UBlueprint>(BPClass->ClassGeneratedBy))
+			{
+				Key = BP->GeneratedClass.Get();
+			}
+		}
+		Key = Key ? Key : InItemActorClass;
+#endif
+		if (!IsItemMetaDataInitialized())
+		{
+			if (const FDataTableRowHandle* Value = SoftItemMetaData.Find(Key))
+			{
+				return Value->GetRow<ItemDTRow_T>(Value->RowName.ToString());
+			}
+		}
+		else
+		{
+			if (const FDataTableRowHandle* Value = ItemMetaDataMap.Find(Key))
+			{
+				return Value->GetRow<ItemDTRow_T>(Value->RowName.ToString());
+			}
+		}
+		return nullptr;
+	}
+
+	template<typename ItemActor_T = ANAItemActor>
+		requires TIsDerivedFrom< ItemActor_T, ANAItemActor>::IsDerived
+	const UNAItemData* CreateItemDataByActor(ItemActor_T* InItemActor)
+	{
+		if (!InItemActor)
+		{
+			ensureAlwaysMsgf(false, TEXT("[UNAItemEngineSubsystem::CreateItemDataByActor]  유효하지 않은 ItemActor를 전달받음."));
+			return nullptr;
+		}
+		
+		const bool bIsCDOActor = InItemActor->HasAnyFlags(RF_ClassDefaultObject);
+		
+		if (!bIsCDOActor && !IsItemMetaDataInitialized())
+		{
+			ensureAlwaysMsgf(
+				false, TEXT("[UNAItemEngineSubsystem::CreateItemDataByActor]  아직도 아이템 메타데이터 매핑이 안되어있다고?? 어째서야"));
+			return nullptr;
+		}
+		
+		UClass* InItemActorClass = InItemActor->GetClass();
+
+		// 1) 아이템 메타데이터 검색
+		const TMap<TSubclassOf<ANAItemActor>, FDataTableRowHandle>::ValueType* ValuePtr = ItemMetaDataMap.Find(InItemActorClass);
+		if (!ValuePtr)
+		{
+			UE_LOG(LogTemp, Warning,
+			       TEXT("[UNAItemEngineSubsystem::CreateItemDataByActor]  ValuePtr was null."));
+			return nullptr;
+		}
+		FDataTableRowHandle ItemMetaDTRowHandle = *ValuePtr;
+		if (ItemMetaDTRowHandle.IsNull())
+		{
+			ensureAlwaysMsgf(
+				false,
+				TEXT(
+					"[UNAItemEngineSubsystem::CreateItemDataByActor]  ItemMetaDataMap에 등록되지 않은 ItemActorClass임.  %s"
+				), *InItemActorClass->GetName());
+			return nullptr;
+		}
+
+		// 2) UNAItemData 객체 생성 및 초기화
+		UNAItemData* NewItemData = NewObject<UNAItemData>(this, NAME_None, RF_Transient);
+		if (!NewItemData)
+		{
+			ensureAlwaysMsgf(
+				false, TEXT("[UNAItemGameInstanceSubsystem::CreateItemDataByActor]  새로운 UNAItemData 객체 생성 실패"));
+			return nullptr;
+		}
+
+		NewItemData->ItemMetaDataHandle = ItemMetaDTRowHandle;
+		FString NameStr;
+		// if (bIsCDOActor)
+		// {
+		// 	NameStr = TEXT("CDO_");
+		// }
+		NameStr += ItemMetaDTRowHandle.RowName.ToString();
+		FString CountStr = FString::FromInt(NewItemData->IDCount.GetValue());
+		FString NewItemID = NameStr + TEXT("_") + CountStr;
+
+		NewItemData->ID = FName(*NewItemID);
+
+		// 3) 새로 생성한 UNAItemData 객체의 소유권을 런타임 때 아이템 데이터 추적용 Map으로 이관
+		RuntimeItemDataMap.Emplace(NewItemData->ID, NewItemData);
+
+		UE_LOG(LogTemp, Warning, TEXT("[CreateItemDataByActor]  아이템 데이터 생성(%s) - 아이템 액터(%s)")
+			,*NewItemID, *InItemActor->GetName());
+		
+		return RuntimeItemDataMap[NewItemData->ID].Get();
+	}
+
+	UNAItemData* GetRuntimeItemData(const FName& InItemID) const;
+	
+	UNAItemData* CreateItemDataCopy(const UNAItemData* SourceItemData);
+
+	// Inventory 관련
+	UNAItemData* CreateItemDataBySlot( UWorld* InWorld, const FNAInventorySlot& InInventorySlot );
+
+	/**
+	 * 
+	 * @param InItemID 
+	 * @param bDestroyItemActor : 해당 아이템 데이터를 참조하는(ID값으로 검색) 아이템 액터를 찾아서 파괴할지 여부
+	 * @return 
+	 */
+	bool DestroyRuntimeItemData(const FName& InItemID, const bool bDestroyItemActor = false);
+	/**
+	 * 
+	 * @param InItemID 
+	 * @param bDestroyItemActor : 해당 아이템 데이터를 참조하는(ID값으로 검색) 아이템 액터를 찾아서 파괴할지 여부.
+	 *							  아이템 액터의 생명주기를 명시적으로 조절해야하는 경우 이 플래그를 쓰면 안됨
+	 * @return 
+	 */
+	bool DestroyRuntimeItemData(UNAItemData* InItemData, const bool bDestroyItemActor = false);
+
+	template <typename ItemActorT, typename Func>
+		requires TIsDerivedFrom<ItemActorT, ANAItemActor>::IsDerived
+	void ForEachItemActorOfClass(UWorld* World, Func&& Predicate)
+	{
+		if (!World) return;
+
+		for (TActorIterator<ItemActorT> It(World); It; ++It)
+		{
+			ItemActorT* ItemActor = *It;
+			if (IsValid(ItemActor))
+			{
+				Predicate(ItemActor);
+			}
+		}
+	}
+	
+protected:
+	FORCEINLINE bool IsSoftItemMetaDataInitialized() const {
+		return bSoftMetaDataInitialized;
+	}
+		
+private:
+	// 실제 사용할 DataTable 포인터 보관
+	UPROPERTY()
+	TArray<TObjectPtr<UDataTable>> ItemDataTableSources;
+
+	UPROPERTY()
+	TMap<TSoftClassPtr<ANAItemActor>, FDataTableRowHandle> SoftItemMetaData;
+
+	UPROPERTY()
+	uint8 bSoftMetaDataInitialized : 1 = false;
+	
+	// 메타데이터 매핑
+	UPROPERTY()
+	TMap<TSubclassOf<ANAItemActor>, FDataTableRowHandle> ItemMetaDataMap;
+	
+	UPROPERTY()
+	uint8 bMetaDataInitialized : 1 = false;
+
+	// 런타임 데이터 매핑
+	// 아이템 ID: 런타임 때 아이템 데이터 식별용
+	UPROPERTY()
+	TMap<FName, TObjectPtr<UNAItemData>> RuntimeItemDataMap;
+};
+
+----------------------------------------------------------------------------------------------------------------------
+
+## NAItemEngineSubsystem.cpp
+
+// Fill out your copyright notice in the Description page of Project Settings.
+
+
+#include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
+
+#include "Inventory/DataStructs/NAInventoryDataStructs.h"
+
+#include "Item/ItemActor/NAItemActor.h"
+#include "Item/ItemDataStructs/NAWeaponDataStructs.h"
+
+#if WITH_EDITOR || WITH_EDITORONLY_DATA
+#include "Kismet2/KismetEditorUtilities.h"
+#endif
+
+
+// 와 이것도 정적 로드로 CDO 생김 ㅁㅊ
+UNAItemEngineSubsystem::UNAItemEngineSubsystem()
+{
+}
+
+void UNAItemEngineSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+	UE_LOG( LogInit, Log, TEXT("%hs"), __FUNCTION__ )
+
+	if (ItemDataTableSources.IsEmpty())
+	{
+		// 1) Registry 에셋 동기 로드
+		static const FString RegistryPath = TEXT("/Script/ARPG.ItemDataTablesAsset'/Game/00_ProjectNA/01_Blueprint/00_Actor/MainGame/Items/DA_ItemDataTables.DA_ItemDataTables'");
+		UItemDataTablesAsset* Registry = Cast<UItemDataTablesAsset>(StaticLoadObject(UItemDataTablesAsset::StaticClass(), nullptr, *RegistryPath));
+	
+		if (!Registry)
+		{
+			UE_LOG(LogTemp, Error, TEXT("[UNAItemGameInstanceSubsystem::Initialize]  ItemDataTablesAsset 로드 실패: %s"), *RegistryPath);
+			return;
+		}
+	
+		// 2) Registry 안의 SoftObjectPtr<UDataTable> 리스트 순회
+		UE_LOG(LogTemp, Warning, TEXT("[UNAItemGameInstanceSubsystem::Initialize]  아이템 DT LoadSynchronous 시작"));
+		for (const TSoftObjectPtr<UDataTable>& SoftDT : Registry->ItemDataTables)
+		{
+			UDataTable* ResourceDT = SoftDT.LoadSynchronous();
+			if (!ResourceDT)
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("[UNAItemGameInstanceSubsystem]  Failed to load DataTable: %s"), *SoftDT.ToString());
+				continue;
+			}
+	
+			ItemDataTableSources.Emplace(ResourceDT);
+			UE_LOG(LogTemp, Display,
+				TEXT("[UNAItemGameInstanceSubsystem]  Loaded DataTable: %s"), *ResourceDT->GetName());
+		}
+
+		if (ItemDataTableSources.IsEmpty()) return;
+		
+		// 3) TSoftClassPtr<T>, FDataTableRowHandle 맵 생성 -> 블루프린트 에셋 로드 전에 메타데이터 미리 인스턴싱
+		UE_LOG(LogTemp, Warning,
+				TEXT("[UNAItemGameInstanceSubsystem]  블루프린트 에셋 로드 전에 메타데이터 미리 인스턴싱"));
+		for (UDataTable* DT : ItemDataTableSources)
+		{
+			for (const TPair<FName, uint8*>& Pair : DT->GetRowMap())
+			{
+				FName  RowName = Pair.Key;
+				FNAItemBaseTableRow* Row = DT->FindRow<FNAItemBaseTableRow>(RowName, TEXT("Mapping [soft] item meta data"));
+				if (!Row || Row->ItemClass.IsNull()) { continue; }
+				FDataTableRowHandle Handle;
+				Handle.DataTable = DT;
+				Handle.RowName = RowName;
+				SoftItemMetaData.Emplace(Row->ItemClass, Handle);
+			}
+		}
+	
+		// 4) 메타데이터 맵 빌드
+		UE_LOG(LogTemp, Warning,
+				TEXT("[UNAItemGameInstanceSubsystem]  메타데이터 맵 빌드"));
+		if ( !SoftItemMetaData.IsEmpty() && ItemMetaDataMap.IsEmpty())
+		{
+			bSoftMetaDataInitialized = true;
+			ItemMetaDataMap.Reserve(SoftItemMetaData.Num());
+			
+			for (const auto& Pair : SoftItemMetaData)
+			{
+				UClass* NewItemActorClass = Pair.Key.LoadSynchronous();
+				// 블프 CDO 동적 패치 이후, 재컴파일 -> 블프 에디터 패널에 동적 패치한 내용을 반영하기 위함
+#if WITH_EDITOR || WITH_EDITORONLY_DATA
+				if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(NewItemActorClass)))
+				{
+					FKismetEditorUtilities::CompileBlueprint(
+						BP,
+						EBlueprintCompileOptions::SkipGarbageCollection
+						// | EBlueprintCompileOptions::IncludeCDOInReferenceReplacement
+						// | EBlueprintCompileOptions::SkipNewVariableDefaultsDetection
+						| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
+					);
+				}
+#endif
+				if (NewItemActorClass && !Pair.Value.IsNull())
+				{
+					ItemMetaDataMap.Emplace(NewItemActorClass, Pair.Value);
+				}
+			}
+		}
+	}
+	
+	if (!ItemDataTableSources.IsEmpty() && !ItemMetaDataMap.IsEmpty()) {
+		bMetaDataInitialized = true;
+		UE_LOG(LogTemp, Warning, TEXT("[UNAItemEngineSubsystem::Initialize]  아이템 메타데이터 맵 초기화 완료"));
+	}
+}
+
+void UNAItemEngineSubsystem::Deinitialize()
+{
+	Super::Deinitialize();
+}
+#if WITH_EDITOR
+bool UNAItemEngineSubsystem::IsRegisteredItemMetaClass(UClass* ItemClass) const
+{
+	UClass* Key = ItemClass;
+	if (UBlueprintGeneratedClass* BPClass = Cast<UBlueprintGeneratedClass>(ItemClass))
+	{
+		if (UBlueprint* BP = Cast<UBlueprint>(BPClass->ClassGeneratedBy))
+		{
+			Key = BP->GeneratedClass.Get();
+		}
+	}
+	Key = Key ? Key : ItemClass;
+	
+	return ItemClass->IsChildOf<ANAItemActor>() && ItemMetaDataMap.Contains(ItemClass);
+}
+
+void UNAItemEngineSubsystem::RegisterNewItemMetaData(UClass* NewItemClass, const UDataTable* InDataTable, const FName InRowName)
+{
+	if (InDataTable && InRowName.IsValid())
+	{
+		// 재검증
+		if (IsRegisteredItemMetaClass(NewItemClass))
+		{
+			ensure(false);
+			return;
+		}
+		FDataTableRowHandle NewHandle;
+		NewHandle.DataTable = InDataTable;
+		NewHandle.RowName = InRowName;
+		ItemMetaDataMap.Emplace(NewItemClass, NewHandle);
+	}
+}
+
+void UNAItemEngineSubsystem::VerifyItemMetaDataRowHandle(UClass* ItemClass, const UDataTable* InDataTable, const FName InRowName)
+{
+	if (IsItemMetaDataInitialized() && IsRegisteredItemMetaClass(ItemClass))
+	{
+		if (ItemMetaDataMap[ItemClass].IsNull())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[VerifyItemMetaDataRowHandle]  왜 어째서 메타데이터 핸들이 null입니까 휴먼."));
+			ItemMetaDataMap[ItemClass].DataTable = InDataTable;
+			ItemMetaDataMap[ItemClass].RowName = InRowName;
+			return;
+		}
+
+		if (ItemMetaDataMap[ItemClass].DataTable != InDataTable)
+		{
+			ensureAlwaysMsgf(false,
+				TEXT("[VerifyItemMetaDataRowHandle]  아이템 메타데이터 오류: 아이템 클래스는 동일한데 데이터 테이블이 달랐음"));
+			//ItemMetaDataMap[ItemClass].DataTable = InDataTable;
+			return;
+		}
+		
+		if (ItemMetaDataMap[ItemClass].RowName != InRowName)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[VerifyItemMetaDataRowHandle]  RowName 업데이트: [%s, %s]"),
+				*ItemClass->GetName(), *InRowName.ToString());
+			ItemMetaDataMap[ItemClass].RowName = InRowName;
+		}
+	}
+}
+#endif
+
+UNAItemData* UNAItemEngineSubsystem::CreateItemDataCopy(const UNAItemData* SourceItemData)
+{
+	if (!IsValid(SourceItemData))
+	{
+		ensureAlwaysMsgf(false, TEXT("[UNAItemEngineSubsystem::CreateItemDataCopy]  SourceItemData was null."));
+		return nullptr;
+	}
+
+	if (SourceItemData->ItemMetaDataHandle.IsNull())
+	{
+		ensureAlwaysMsgf(false, TEXT("[UNAItemEngineSubsystem::CreateItemDataCopy]  SourceItemData's ItemMetaDataHandle was null."));
+		return nullptr;
+	}
+	
+	// 1) DuplicateObject로 원본을 복제합니다 (생성자 로직은 실행되지 않음).
+	UNAItemData* Duplicated = DuplicateObject<UNAItemData>(SourceItemData, this);
+	if (!Duplicated)
+	{
+		ensureAlwaysMsgf(false, TEXT("[UNAItemEngineSubsystem::CreateItemDataCopy]  Failed to duplicate item data."));
+		return nullptr;
+	}
+
+	// 2) 생성자가 실행되지 않았으니, IDCount를 수동으로 증가
+	//    FThreadSafeCounter::Increment()은 증가된 신규 값을 반환
+	int32 NewNumber = UNAItemData::IDCount.Increment();
+	Duplicated->IDNumber = NewNumber;
+
+	// 3) ID를 “RowName + NewNumber” 형태로 다시 세팅
+	FString NameStr;
+	NameStr = Duplicated->ItemMetaDataHandle.RowName.ToString();
+	FString CountStr = FString::FromInt(Duplicated->IDNumber);
+	FString NewItemID = NameStr + TEXT("_") + CountStr;
+
+	Duplicated->ID = FName(*NewItemID);
+
+	// 4) 새로 생성한 UNAItemData 객체의 소유권을 런타임 때 아이템 데이터 추적용 Map으로 이관
+	RuntimeItemDataMap.Emplace(Duplicated->ID, Duplicated);
+
+	UE_LOG(LogTemp, Warning, TEXT("[CreateItemDataCopy]  아이템 데이터 복제(%s), 원본 소스 데이터(%s)")
+			, *NewItemID, *SourceItemData->ID.ToString());
+	
+	return RuntimeItemDataMap[Duplicated->ID].Get();
+}
+
+UNAItemData* UNAItemEngineSubsystem::GetRuntimeItemData(const FName& InItemID) const
+{
+	UNAItemData* Value = nullptr;
+	if (!InItemID.IsNone())
+	{
+		Value = RuntimeItemDataMap.Find(InItemID)->Get();
+	}
+	return Value;
+}
+
+UNAItemData* UNAItemEngineSubsystem::CreateItemDataBySlot(UWorld* InWorld, const FNAInventorySlot& InInventorySlot)
+{
+	if (InInventorySlot.ItemMetaDataKey)
+	{
+		FDataTableRowHandle ItemMetaDTRowHandle = *(ItemMetaDataMap.Find(InInventorySlot.ItemMetaDataKey.Get()));
+		if (ItemMetaDTRowHandle.IsNull()) {
+			ensureAlwaysMsgf(false,
+				TEXT("[UNAItemEngineSubsystem::CreateItemDataBySlot]  ItemMetaDataMap에 등록되지 않은 ItemActorClass임.  %s"),
+				*InInventorySlot.ItemMetaDataKey.Get()->GetName());
+			return nullptr;
+		}
+		
+		UNAItemData* NewItemData = NewObject<UNAItemData>(this, NAME_None, RF_Transient);
+		if (!NewItemData) {
+			ensureAlwaysMsgf(false, TEXT("[UNAItemEngineSubsystem::CreateItemDataBySlot]  새로운 UNAItemData 객체 생성 실패"));
+			return nullptr;
+		}
+		
+		NewItemData->ItemMetaDataHandle = ItemMetaDTRowHandle;
+		FString NameStr    = ItemMetaDTRowHandle.RowName.ToString();
+		FString CountStr   = FString::FromInt(NewItemData->IDCount.GetValue());
+		FString NewItemID  = NameStr + TEXT("_") + CountStr;
+		
+		NewItemData->ID = FName(*NewItemID);
+		NewItemData->ItemState = static_cast<EItemState>(InInventorySlot.ItemState);
+
+		// 3) 새로 생성한 UNAItemData 객체의 소유권을 런타임 때 아이템 데이터 추적용 Map으로 이관
+		RuntimeItemDataMap.Emplace(NewItemData->ID, NewItemData);
+
+		UE_LOG(LogTemp, Warning, TEXT("[CreateItemDataBySlot]  슬롯 데이터로 아이템 데이터 생성(%s)")
+			, *NewItemID);
+		
+		return RuntimeItemDataMap[NewItemData->ID];
+	}
+
+	ensureAlwaysMsgf(false, TEXT("[UNAItemEngineSubsystem::CreateItemDataBySlot]  InInventorySlot의 ItemMetaDataKey가 유효하지 않음."));
+	return nullptr;
+}
+
+bool UNAItemEngineSubsystem::DestroyRuntimeItemData(const FName& InItemID, const bool bDestroyItemActor)
+{
+	bool bResult = RuntimeItemDataMap.Contains(InItemID);
+	if (bResult)
+	{
+		UNAItemData* ItemData = RuntimeItemDataMap[InItemID];
+		if (ensureAlways(IsValid(ItemData)))
+		{
+			ItemData->RemoveFromRoot();
+			ItemData->ConditionalBeginDestroy();
+
+			RuntimeItemDataMap[InItemID] =  nullptr;
+			int32 bSucceed = RuntimeItemDataMap.Remove(InItemID);
+			bResult = bSucceed == 1;
+		}
+		if (GetWorld() && bDestroyItemActor)
+		{
+			ForEachItemActorOfClass<ANAItemActor>(GetWorld(), [InItemID](ANAItemActor* ItemActor)
+			{
+				if (ItemActor->GetItemData()->GetItemID() == InItemID)
+				{
+					ItemActor->Destroy();
+				}
+			});
+		}
+	}
+	return bResult;
+}
+
+bool UNAItemEngineSubsystem::DestroyRuntimeItemData(UNAItemData* InItemData, const bool bDestroyItemActor)
+{
+	return DestroyRuntimeItemData(InItemData->ID, bDestroyItemActor);
+}
+

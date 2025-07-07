@@ -1,0 +1,1529 @@
+## NAItemActor.h
+
+#pragma once
+
+#include "GameFramework/Actor.h"
+#include "Interaction/NAInteractableInterface.h"
+#include "Item/NAItemUseInterface.h"
+#include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
+#include "NAItemActor.generated.h"
+
+class UTextRenderComponent;
+class UNAMontageCombatComponent;
+class UBillboardComponent;
+class UMaterialInstanceConstant;
+
+UENUM()
+enum class EItemSubobjDirtyFlags : uint8
+{
+	ISDF_None	= (0x0),
+	
+	ISDF_CollisionShape		= (1<<0),
+	ISDF_MeshType				= (1<<1),
+};
+ENUM_CLASS_FLAGS(EItemSubobjDirtyFlags)
+
+UCLASS(Abstract)
+class ARPG_API ANAItemActor : public AActor, public INAInteractableInterface, public INAItemUseInterface
+{
+	GENERATED_BODY()
+
+	friend class UNAItemEngineSubsystem;
+public:
+	ANAItemActor(const FObjectInitializer& ObjectInitializer);
+	virtual void PostInitProperties() override;
+	virtual void PostLoad() override;
+	virtual void PostActorCreated() override;
+	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void UnregisterAllComponents(bool bForReregister = false) override;
+	virtual void Destroyed() override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+protected:
+	virtual void BeginPlay() override;
+
+public:
+	virtual void Tick(float DeltaTime) override;
+	
+	UFUNCTION(BlueprintCallable, Category = "Item Actor")
+	UNAItemData* GetItemData() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Item Actor")
+	bool HasValidItemID() const;
+
+	static void MigrateItemStateFromChildActor(ANAItemActor* SourceChildActor, ANAItemActor* TargetActor)
+	{
+		if ( UNAItemEngineSubsystem::Get() && SourceChildActor && TargetActor)
+		{
+			if (ensureAlwaysMsgf(SourceChildActor->IsChildActor() && SourceChildActor->HasValidItemID()
+				&& !TargetActor->IsChildActor() && TargetActor->HasValidItemID(),
+				TEXT(
+					"[MigrateItemStateFromChildActor]  ")))
+			{
+				if (UNAItemEngineSubsystem::Get()->DestroyRuntimeItemData(TargetActor->ItemDataID))
+				{
+					TargetActor->ItemDataID = SourceChildActor->ItemDataID;
+					if (SourceChildActor->InteractableInterfaceRef && TargetActor->InteractableInterfaceRef)
+					{
+						INAInteractableInterface::TransferInteractableStateToChildActor(
+							SourceChildActor->InteractableInterfaceRef
+							, TargetActor->InteractableInterfaceRef);
+					}
+
+					if (UChildActorComponent* ChildActorComponent =
+						Cast<UChildActorComponent>(SourceChildActor->GetParentComponent()))
+					{
+						SourceChildActor->ItemDataID = NAME_None;
+						ChildActorComponent->DestroyChildActor();
+						ChildActorComponent->SetChildActorClass(nullptr);
+					}
+				}
+			}
+		}
+	}
+
+	static void MigrateItemStateToChildActor(ANAItemActor* SourceActor, ANAItemActor* TargetChildActor)
+	{
+		if (SourceActor && TargetChildActor)
+		{
+			if (ensureAlwaysMsgf(!SourceActor->IsChildActor() && SourceActor->HasValidItemID()
+				&& TargetChildActor->IsChildActor() && !TargetChildActor->HasValidItemID(),
+				TEXT(
+					"[MigrateItemStateToChildActor]  ChildActorComponent에 의해 생성된 아이템 액터에 새로 생성된 아이템 데이터가 있었음")))
+			{
+				TargetChildActor->ItemDataID = SourceActor->ItemDataID;
+				if (SourceActor->InteractableInterfaceRef && TargetChildActor->InteractableInterfaceRef)
+				{
+					INAInteractableInterface::TransferInteractableStateToChildActor(
+						SourceActor->InteractableInterfaceRef
+						, TargetChildActor->InteractableInterfaceRef);
+				}
+
+				SourceActor->ItemDataID = NAME_None;
+				SourceActor->Destroy();
+			}
+		}
+	}
+
+	static void AssignItemDataToChildActor(UNAItemData* ItemData, ANAItemActor* TargetChildActor)
+	{
+		if (ItemData && !ItemData->GetItemID().IsNone() && TargetChildActor)
+		{
+			ensureAlwaysMsgf(TargetChildActor->IsChildActor() && !TargetChildActor->HasValidItemID(),
+				TEXT(
+					"[AssignItemDataToChildActor]  ChildActorComponent에 의해 생성된 아이템 액터에 새로 생성된 아이템 데이터가 있었음"));
+			if (TargetChildActor->IsChildActor() && !TargetChildActor->GetItemData())
+			{
+				TargetChildActor->ItemDataID = ItemData->GetItemID();
+				TargetChildActor->VerifyInteractableData();
+			}
+		}
+	}
+
+	TScriptInterface<INAInteractableInterface> GetInteractableInterface() const
+	{
+		return InteractableInterfaceRef;
+	}
+
+	virtual void ReleaseItemWidgetComponent();
+	virtual void CollapseItemWidgetComponent();
+
+	void FinalizeAndDestroyAfterInventoryAdded(AActor* Interactor);
+protected:
+	virtual EItemSubobjDirtyFlags GetDirtySubobjectFlags(const FNAItemBaseTableRow* MetaData) const;
+	
+	UFUNCTION()
+	void OnActorBeginOverlap_Impl(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult & SweepResult);
+
+	UFUNCTION()
+	void OnActorEndOverlap_Impl(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
+
+	virtual void FinalizeAndDestroyAfterInventoryAdded_Impl(AActor* Interactor) {}
+
+	void BroadcastInitialOverlapsOnTriggerSphere();
+
+	void TransferItemWidgetToPopupBeforeDestroy() const;
+	
+	/** 기존 루트 컴포넌트를 제거하고, ItemCollision을 새로운 루트로 설정한 뒤, 기존 자식 컴포넌트들을 이관 */
+	virtual void ReplaceRootWithItemCollisionIfNeeded();
+	
+private:
+	void InitItemData();
+	void VerifyInteractableData();
+	virtual void InitCheckIfChildActor();
+
+protected:
+	friend struct FNAItemBaseTableRow;
+	
+	// Optional Subobject
+	uint8 bNeedItemCollision :1 = true;
+	
+	// Optional Subobject
+	uint8 bNeedItemMesh :1 = true;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Replicated, Category="Item Actor")
+	bool bWasChildActor = false;
+	
+	UPROPERTY(Transient, NonTransactional, VisibleAnywhere, BlueprintReadOnly, Category="ItemActor")
+	USceneComponent* StubRootComponent;
+	
+	UPROPERTY(Transient, NonTransactional, VisibleAnywhere, BlueprintReadOnly, Category="Item Actor | Collision Shape")
+	UShapeComponent* ItemCollision;
+
+	UPROPERTY(Transient, NonTransactional, VisibleAnywhere, Category = "Item Actor | Mesh")
+	UMeshComponent* ItemMesh;
+
+	UPROPERTY(VisibleAnywhere, Category = "Item Actor | Static Mesh")
+	TObjectPtr<class UGeometryCollection> ItemFractureCollection;
+	
+	UPROPERTY(VisibleAnywhere, Category = "Item Actor | Static Mesh")
+	TObjectPtr<class UGeometryCollectionCache> ItemFractureCache;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Item Actor | Trigger Sphere")
+	TObjectPtr<class USphereComponent> TriggerSphere;
+
+	UPROPERTY(VisibleAnywhere, Category = "Item Actor | Static Mesh")
+	TObjectPtr<class UNAItemWidgetComponent> ItemWidgetComponent;
+
+private:
+	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "Item Actor", meta = (AllowPrivateAccess = "true"))
+	FName ItemDataID;
+
+//======================================================================================================================
+// Interactable Interface Implements
+//======================================================================================================================
+public:
+	virtual bool CanInteract_Implementation() const override;
+	virtual void NotifyInteractableFocusBegin_Implementation(AActor* InteractableActor, AActor* InteractorActor) override;
+	virtual void NotifyInteractableFocusEnd_Implementation(AActor* InteractableActor, AActor* InteractorActor) override;
+	
+	virtual bool IsOnInteract_Implementation() const override;
+	
+	virtual bool TryGetInteractableData(FNAInteractableData& OutData) const override final;
+	virtual bool HasInteractionDelay() const override final;
+	virtual float GetInteractionDelay() const override final;
+	
+	virtual bool IsAttachedAndPendingUse() const override;
+	virtual void SetAttachedAndPendingUse(bool bNewState) override;
+
+	virtual bool IsUnlimitedInteractable() const override final;
+	virtual int32 GetInteractableCount() const override final;
+	virtual void SetInteractableCount(int32 NewCount) override final;
+	
+	virtual bool CanPerformInteractionWith(AActor* Interactor) const override;
+
+	virtual bool TryInteract_Implementation(AActor* Interactor) override;
+	
+protected:
+	virtual bool BeginInteract_Implementation(AActor* Interactor) override;
+	virtual bool ExecuteInteract_Implementation(AActor* Interactor) override;
+	virtual bool EndInteract_Implementation(AActor* Interactor) override;
+
+protected:
+	/** 자기 자신(this)이 구현한 인터페이스를 보관 */
+	UPROPERTY()
+	TScriptInterface<INAInteractableInterface> InteractableInterfaceRef = nullptr;
+};
+
+UCLASS()
+class ARPG_API ANAItemWidgetPopupActor final : public AActor
+{
+	GENERATED_BODY()
+    
+public:
+	ANAItemWidgetPopupActor();
+
+private:
+	friend class ANAItemActor;
+	/** 
+	 * 외부에서 스폰 후 바로 호출할 초기화 함수
+	 */
+	void InitializePopup(UNAItemWidgetComponent* NewPopupWidgetComponent);
+	
+	/** 애니메이션 완료 시 호출될 함수 */
+	UFUNCTION()
+	void OnCollapseAnimationFinished();
+
+private:
+	/** Collapse 애니메이션이 담긴 위젯 컴포넌트 */
+	UPROPERTY()
+	UNAItemWidgetComponent* PopupWidgetComponent = nullptr;
+};
+
+----------------------------------------------------------------------------------------------------------------------
+
+## NAItemActor.cpp
+
+
+#include "Item/ItemActor/NAItemActor.h"
+
+#include "NACharacter.h"
+#include "Components/SphereComponent.h"
+#include "Components/BoxComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "Interaction/NAInteractionComponent.h"
+#include "GeometryCollection/GeometryCollectionObject.h"
+#include "Item/ItemWidget/NAItemWidgetComponent.h"
+#include "Net/UnrealNetwork.h"
+#include "Item/ItemWidget/NAItemWidget.h"
+
+
+ANAItemActor::ANAItemActor(const FObjectInitializer& ObjectInitializer)
+	:Super(ObjectInitializer)
+{
+	if (HasAnyFlags(RF_ClassDefaultObject))
+	{
+		if (!GetClass()->HasAllClassFlags(CLASS_CompiledFromBlueprint))
+		{
+			UE_LOG(LogTemp, Display, TEXT("[ANAItemActor]  C++ CDO 생성자 (%s)"), *GetName());
+		}
+		else
+		{
+			UE_LOG(LogTemp, Display, TEXT("[ANAItemActor]  BP CDO 생성자 (%s)"), *GetName());
+		}
+	}
+	else
+	{
+		if (!GetClass()->HasAllClassFlags(CLASS_CompiledFromBlueprint))
+		{
+			UE_LOG(LogTemp, Display, TEXT("[ANAItemActor]  C++ 인스턴스 생성자 (%s)"), *GetName());
+		}
+		else
+		{
+			UE_LOG(LogTemp, Display, TEXT("[ANAItemActor]  BP 인스턴스 생성자 (%s)"), *GetName());
+		}
+	}
+
+	StubRootComponent = CreateDefaultSubobject<USceneComponent>( "StubRootComponent", true );
+	SetRootComponent( StubRootComponent );
+
+	if (UNAItemEngineSubsystem* ItemEngineSubsystem = UNAItemEngineSubsystem::Get())
+	{
+		if (const FNAItemBaseTableRow* MetaData = ItemEngineSubsystem->GetItemMetaDataByClass(GetClass()))
+		{
+			switch (MetaData->CollisionShape)
+			{
+			case EItemCollisionShape::ICS_Sphere:
+				ItemCollision = CreateDefaultSubobject<USphereComponent>(TEXT("ItemCollision(Sphere)"), true);
+				break;
+			case EItemCollisionShape::ICS_Box:
+				ItemCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("ItemCollision(Box)"), true);
+				break;
+			case EItemCollisionShape::ICS_Capsule:
+				ItemCollision = CreateDefaultSubobject<UCapsuleComponent>(TEXT("ItemCollision(Capsule)"), true);
+				break;
+			default:
+				break;
+			}
+			switch (MetaData->MeshType)
+			{
+			case EItemMeshType::IMT_Static:
+				ItemMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ItemMesh(Static)"), true);
+				break;
+			case EItemMeshType::IMT_Skeletal:
+				ItemMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("ItemMesh(Skeletal)"), true);
+				break;
+			default:
+				break;
+			}
+		}
+	}
+	
+	TriggerSphere = CreateDefaultSubobject<USphereComponent>("TriggerSphere");
+	TriggerSphere->SetCollisionProfileName(TEXT("IX_TriggerShape"));
+	TriggerSphere->SetGenerateOverlapEvents(true);
+	TriggerSphere->CanCharacterStepUpOn = ECB_No;
+	TriggerSphere->SetSimulatePhysics(false);
+	TriggerSphere->SetSphereRadius(280.0f);
+
+	ItemWidgetComponent
+		= CreateOptionalDefaultSubobject<UNAItemWidgetComponent>(TEXT("ItemWidgetComponent"));
+
+	if (ItemCollision)
+	{
+		ItemCollision->SetupAttachment(GetRootComponent());
+	}
+	if (ItemMesh)
+	{
+		ItemMesh->SetupAttachment(GetRootComponent());
+	}
+	if (TriggerSphere)
+	{
+		TriggerSphere->SetupAttachment(GetRootComponent());
+	}
+	if (ItemWidgetComponent)
+	{
+		ItemWidgetComponent->SetupAttachment(GetRootComponent());
+	}
+	
+	ItemDataID = NAME_None;
+	AActor::SetReplicateMovement( true );
+	bAlwaysRelevant = true;
+	bReplicates = true;
+}
+
+void ANAItemActor::PostInitProperties()
+{
+	Super::PostInitProperties();
+}
+
+void ANAItemActor::PostLoad()
+{
+	Super::PostLoad();
+	
+	if (!HasAnyFlags(RF_ClassDefaultObject))
+	{
+		if (ItemDataID.IsNone() && !GetWorld()->IsPreviewWorld()
+			&& !IsChildActor())
+		{
+			InitItemData();
+			InitCheckIfChildActor();
+		}
+	}
+}
+
+void ANAItemActor::PostActorCreated()
+{
+	Super::PostActorCreated();
+}
+
+EItemSubobjDirtyFlags ANAItemActor::GetDirtySubobjectFlags(
+	const FNAItemBaseTableRow* MetaData) const
+{
+	EItemSubobjDirtyFlags DirtyFlags = EItemSubobjDirtyFlags::ISDF_None;
+	if (!MetaData) { ensureAlways(false); return DirtyFlags; }
+	if (bNeedItemCollision
+		&& MetaData->CollisionShape != EItemCollisionShape::ICS_None)
+	{
+		bool bDirtyShape = false;
+		bDirtyShape |= ItemCollision == nullptr;
+		if (ItemCollision) {
+			const FCollisionShape Shape = ItemCollision->GetCollisionShape();
+			switch (MetaData->CollisionShape)
+			{
+			case EItemCollisionShape::ICS_Sphere:
+				bDirtyShape |= !Shape.IsSphere();
+				bDirtyShape |=
+					Shape.GetSphereRadius()!= MetaData->CollisionSphereRadius;
+				break;
+			case EItemCollisionShape::ICS_Box:
+				bDirtyShape |= !Shape.IsBox();
+				bDirtyShape |=
+					Shape.GetExtent() != MetaData->CollisionBoxExtent;
+				break;
+			case EItemCollisionShape::ICS_Capsule:
+				bDirtyShape |= !Shape.IsCapsule();
+				bDirtyShape |=
+					Shape.GetCapsuleRadius() != MetaData->CollisionCapsuleSize.X;
+				bDirtyShape |=
+					Shape.GetCapsuleHalfHeight() != MetaData->CollisionCapsuleSize.Y;
+				break;
+			default:
+				break;
+			}
+		}
+		if ( bDirtyShape ) {
+			EnumAddFlags( DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionShape );
+		}
+	}
+	if (MetaData->MeshType != EItemMeshType::IMT_None && bNeedItemMesh)
+	{
+		bool bDirtyMesh = false;
+		bDirtyMesh |= ItemMesh == nullptr;
+		if (ItemMesh) {
+			switch (MetaData->MeshType)
+			{
+			case EItemMeshType::IMT_Static:
+				{
+					UStaticMeshComponent* StaticMeshComp = Cast<UStaticMeshComponent>(ItemMesh);
+					bDirtyMesh |= StaticMeshComp == nullptr;
+					if (StaticMeshComp) {
+						bDirtyMesh |=
+							StaticMeshComp->GetStaticMesh() != MetaData->StaticMeshAssetData.StaticMesh;
+						bDirtyMesh |=
+							ItemFractureCollection != MetaData->StaticMeshAssetData.FractureCollection;
+						bDirtyMesh |=
+							ItemFractureCache != MetaData->StaticMeshAssetData.FractureCache;
+					}
+					break;
+				}
+			case EItemMeshType::IMT_Skeletal:
+				{
+					USkeletalMeshComponent* SkeletalMeshComp = Cast<USkeletalMeshComponent>(ItemMesh);
+					bDirtyMesh |= SkeletalMeshComp == nullptr;
+					if (SkeletalMeshComp) {
+						bDirtyMesh |=
+							SkeletalMeshComp->GetSkeletalMeshAsset() != MetaData->SkeletalMeshAssetData.SkeletalMesh;
+						
+						bDirtyMesh |=
+							SkeletalMeshComp->GetAnimClass() != MetaData->SkeletalMeshAssetData.AnimClass;
+					}
+					break;
+				}
+			default:
+				break;
+			}
+		}
+		if ( bDirtyMesh ) {
+			EnumAddFlags( DirtyFlags, EItemSubobjDirtyFlags::ISDF_MeshType );
+		}
+	}
+	return DirtyFlags;
+}
+
+void ANAItemActor::ReplaceRootWithItemCollisionIfNeeded()
+{
+	if (!bNeedItemCollision || !ItemCollision) return;
+
+	FTransform PreviousTransform = GetRootComponent()->GetComponentTransform();
+	
+	TArray<USceneComponent*> PreviousChildren;
+	PreviousChildren.Reserve(GetComponents().Num());
+	for (auto It = GetComponents().CreateConstIterator(); It; ++It)
+	{
+		if (USceneComponent* Child = Cast<USceneComponent>(*It))
+		{
+			if (!Child->GetAttachParent()) continue;
+			if (Child == GetRootComponent()) continue;
+
+			Child->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
+			PreviousChildren.Add(Child);
+		}
+	}
+	GetRootComponent()->ClearFlags(RF_Standalone | RF_Public);
+	RemoveInstanceComponent(GetRootComponent());
+	GetRootComponent()->DestroyComponent();
+	
+	SetRootComponent(ItemCollision);
+	ItemCollision->SetWorldTransform(PreviousTransform);
+	if (PreviousChildren.Num() > 0)
+	{
+		for (USceneComponent* Child : PreviousChildren)
+		{
+			if (Child == ItemCollision) continue;
+
+			Child->AttachToComponent(ItemCollision, FAttachmentTransformRules::KeepRelativeTransform);
+		}
+	}
+}
+
+void ANAItemActor::OnConstruction(const FTransform& Transform)
+{
+ 	Super::OnConstruction(Transform);
+	
+	if (!UNAItemEngineSubsystem::Get()
+		|| !UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized()
+#if WITH_EDITOR || WITH_EDITORONLY_DATA
+		|| !UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(GetClass())
+#endif
+		) return;
+
+	// CDO 또는 Child Actor인 경우: 새로운 아이템 데이터 인스턴스 생성 안함
+	if (!HasAnyFlags(RF_ClassDefaultObject) && ItemDataID.IsNone()
+		&& !GetWorld()->IsPreviewWorld() && !IsChildActor()) {
+		InitItemData();
+	}
+
+	const FNAItemBaseTableRow* MetaData
+		= UNAItemEngineSubsystem::Get()->GetItemMetaDataByClass(GetClass());
+	if (!MetaData) return;
+
+	// 어태치먼트
+    FTransform PreviousTransform = HasAnyFlags(RF_ClassDefaultObject)
+	                                   ? FTransform::Identity
+	                                   : GetRootComponent()->GetComponentTransform();
+
+	const EItemSubobjDirtyFlags DirtyFlags = GetDirtySubobjectFlags(MetaData);
+	UClass* NewItemCollisionClass = nullptr;
+	if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionShape))
+	{
+		switch (MetaData->CollisionShape)
+		{
+		case EItemCollisionShape::ICS_Sphere:
+			NewItemCollisionClass = USphereComponent::StaticClass();
+			break;
+		case EItemCollisionShape::ICS_Box:
+			NewItemCollisionClass = UBoxComponent::StaticClass();
+			break;
+		case EItemCollisionShape::ICS_Capsule:
+			NewItemCollisionClass = UCapsuleComponent::StaticClass();
+			break;
+		default:
+			break;
+		}
+		if (NewItemCollisionClass && ItemCollision && ItemCollision->GetClass() != NewItemCollisionClass)
+		{
+			ItemCollision->ClearFlags(RF_Standalone | RF_Public);
+			ItemCollision->DestroyComponent();
+			RemoveInstanceComponent(ItemCollision);
+		}
+	}
+	UClass* NewItemMeshClass = nullptr;
+	if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_MeshType))
+	{
+		switch (MetaData->MeshType)
+		{
+		case EItemMeshType::IMT_Skeletal:
+			NewItemMeshClass = USkeletalMeshComponent::StaticClass();
+			break;
+		case EItemMeshType::IMT_Static:
+			NewItemMeshClass = UStaticMeshComponent::StaticClass();
+			break;
+		default:
+			break;
+		}
+		if (NewItemMeshClass && ItemMesh && ItemMesh->GetClass() != NewItemMeshClass)
+		{
+			ItemMesh->ClearFlags(RF_Standalone | RF_Public);
+			ItemMesh->DestroyComponent();
+			RemoveInstanceComponent(ItemMesh);
+		}
+	}
+
+	TArray<UActorComponent*> Components = GetComponents().Array();
+	for (UActorComponent* OwnedComponent : Components)
+	{
+		if (!OwnedComponent) continue;
+		if (NewItemCollisionClass && OwnedComponent->GetClass()->IsChildOf(NewItemCollisionClass)
+			&& OwnedComponent->GetName().StartsWith(TEXT("ItemCollision")))
+		{
+			if (UShapeComponent* NewItemCollision = Cast<UShapeComponent>(OwnedComponent))
+			{
+				ItemCollision = NewItemCollision;
+			}
+		}
+		if (NewItemMeshClass && OwnedComponent->GetClass()->IsChildOf(NewItemMeshClass))
+		{
+			if (UMeshComponent* NewItemMesh = Cast<UMeshComponent>(OwnedComponent))
+			{
+				ItemMesh = NewItemMesh;
+			}
+		}
+	}
+	// 부모, 자식에서 Property로 설정된 컴포넌트들을 조회
+	// 최종적으로 프로퍼티에 남은 컴포넌트 주소들을 확인
+	TSet<UActorComponent*> SubObjsActorComponents;
+	for ( TFieldIterator<FObjectProperty> It ( GetClass() ); It; ++It )
+	{
+		if ( It->PropertyClass->IsChildOf( UActorComponent::StaticClass() ) )
+		{
+			if ( UActorComponent* Component = Cast<UActorComponent>( It->GetObjectPropertyValue_InContainer( this ) ) )
+			{
+				SubObjsActorComponents.Add( Component );
+			}
+		}
+	}
+	// 마지막으로 등록된 컴포넌트들을 순회하면서 프로퍼티에 없는 컴포넌트들을 삭제
+	for (UActorComponent* OwnedComponent : GetComponents().Array())
+	{
+		if (USceneComponent* OwnedSceneComp = Cast<USceneComponent>(OwnedComponent))
+		{
+			if (SubObjsActorComponents.Contains( OwnedComponent ))
+			{
+				if (OwnedSceneComp != GetRootComponent()
+					&& OwnedSceneComp->GetAttachParent() != GetRootComponent())
+				{
+					OwnedSceneComp->AttachToComponent(GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
+				}
+				continue;
+			}
+			TArray<USceneComponent*> AttachedChildren = OwnedSceneComp->GetAttachChildren();
+			for (USceneComponent* Child : AttachedChildren)
+			{
+				if (IsValid(Child))
+				{
+					Child->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
+				}
+			}
+			AttachedChildren.Empty();
+			OwnedSceneComp->ClearFlags(RF_Standalone | RF_Public);
+			OwnedSceneComp->DestroyComponent();
+			RemoveInstanceComponent(OwnedSceneComp);
+		}
+	}
+	if (MetaData->CollisionShape != EItemCollisionShape::ICS_None)
+	{
+		if (USphereComponent* SphereCollision = Cast<USphereComponent>(ItemCollision))
+		{
+			SphereCollision->SetSphereRadius(MetaData->CollisionSphereRadius);
+		}
+		else if (UBoxComponent* BoxCollision = Cast<UBoxComponent>(ItemCollision))
+		{
+			BoxCollision->SetBoxExtent(MetaData->CollisionBoxExtent);
+		}
+		else if (UCapsuleComponent* CapsuleCollision = Cast<UCapsuleComponent>(ItemCollision))
+		{
+			CapsuleCollision->SetCapsuleSize(
+				MetaData->CollisionCapsuleSize.X, MetaData->CollisionCapsuleSize.Y);
+		}
+	}
+	if (MetaData->MeshType != EItemMeshType::IMT_None)
+	{
+		if (UStaticMeshComponent* StaticMeshComp = Cast<UStaticMeshComponent>(ItemMesh))
+		{
+			StaticMeshComp->SetStaticMesh(MetaData->StaticMeshAssetData.StaticMesh);
+			ItemFractureCollection = MetaData->StaticMeshAssetData.FractureCollection;
+			ItemFractureCache =  MetaData->StaticMeshAssetData.FractureCache;
+		}
+		else if (USkeletalMeshComponent* SkeletalMeshComp = Cast<USkeletalMeshComponent>(ItemMesh))
+		{
+			SkeletalMeshComp->SetSkeletalMesh(MetaData->SkeletalMeshAssetData.SkeletalMesh);
+			SkeletalMeshComp->SetAnimClass(MetaData->SkeletalMeshAssetData.AnimClass);
+		}
+	}
+	RegisterAllComponents();
+	
+	if (GetRootComponent())
+	{
+		GetRootComponent()->SetWorldTransform(PreviousTransform);
+	}
+	if (ItemCollision)
+	{
+		ItemCollision->SetRelativeTransform(FTransform::Identity);
+		ItemCollision->SetNetAddressable();
+	}
+	if (ItemMesh)
+	{
+		ItemMesh->SetRelativeTransform(MetaData->MeshTransform);
+	}
+}
+
+void ANAItemActor::UnregisterAllComponents(bool bForReregister)
+{
+#if WITH_EDITOR
+	if ( !bForReregister )
+	{
+		bool bDirty = false;
+		TArray<USceneComponent*> TransientComponents = { ItemMesh, ItemCollision };
+	
+		for ( USceneComponent* OwnedTransient : TransientComponents )
+		{
+			if ( OwnedTransient )
+			{
+				if ( OwnedTransient->GetAttachParent() )
+				{
+					OwnedTransient->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
+				}
+				bDirty = true;
+			}
+		}
+
+		for ( TFieldIterator<FObjectProperty> It( GetClass() ); It; ++It )
+		{
+			if ( It->PropertyClass->IsChildOf( USceneComponent::StaticClass() ) )
+			{
+				USceneComponent* Component = It->ContainerPtrToValuePtr<USceneComponent>( this );
+				if ( Component->GetAttachParent() && TransientComponents.Contains( Component->GetAttachParent() ) )
+				{
+					Component->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
+				}
+			}
+		}
+
+		if ( bDirty )
+		{
+			//MarkPackageDirty();
+			//CollectGarbage(RF_NoFlags);
+		}
+	}
+#endif
+	Super::UnregisterAllComponents(bForReregister);	
+}
+
+void ANAItemActor::Destroyed()
+{
+	TransferItemWidgetToPopupBeforeDestroy();
+	Super::Destroyed();
+}
+
+void ANAItemActor::TransferItemWidgetToPopupBeforeDestroy() const
+{
+	if (HasActorBegunPlay() && IsPendingKillPending()
+		&& ItemWidgetComponent && ItemWidgetComponent->IsVisible())
+	{
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	
+		ANAItemWidgetPopupActor* Popup = GetWorld()->SpawnActor<ANAItemWidgetPopupActor>(
+		ANAItemWidgetPopupActor::StaticClass(),
+		GetRootComponent()->GetComponentTransform(),
+		Params);
+
+		ensureAlways(Popup);
+		
+		ItemWidgetComponent->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
+		Popup->InitializePopup(ItemWidgetComponent);
+	}
+}
+
+void ANAItemActor::GetLifetimeReplicatedProps( TArray<FLifetimeProperty>& OutLifetimeProps ) const
+{
+	Super::GetLifetimeReplicatedProps( OutLifetimeProps );
+	DOREPLIFETIME( ANAItemActor, bWasChildActor );
+}
+
+void ANAItemActor::InitItemData()
+{
+	if (HasValidItemID()) return;
+	
+	if (const UNAItemData* NewItemData = UNAItemEngineSubsystem::Get()->CreateItemDataByActor(this))
+	{
+		ItemDataID = NewItemData->GetItemID();
+		VerifyInteractableData();
+	}
+}
+
+void ANAItemActor::VerifyInteractableData()
+{
+	if (InteractableInterfaceRef != nullptr) return;
+	
+	// 이 액터가 UNAInteractableInterface 인터페이스를 구현했다면 this를 할당
+	if (HasValidItemID() && GetClass()->ImplementsInterface(UNAInteractableInterface::StaticClass()))
+	{
+		InteractableInterfaceRef = this;
+	}
+	else
+	{
+		ensureAlways(false);
+	}
+}
+
+void ANAItemActor::ReleaseItemWidgetComponent()
+{
+	if (ItemWidgetComponent && !ItemWidgetComponent->IsVisible())
+	{
+		ItemWidgetComponent->ReleaseItemWidgetPopup();
+	}
+}
+
+void ANAItemActor::CollapseItemWidgetComponent()
+{
+	if (ItemWidgetComponent && ItemWidgetComponent->IsVisible())
+	{
+		ItemWidgetComponent->CollapseItemWidgetPopup();
+	}
+}
+
+void ANAItemActor::FinalizeAndDestroyAfterInventoryAdded(AActor* Interactor)
+{
+	FinalizeAndDestroyAfterInventoryAdded_Impl(Interactor);
+	Destroy();
+}
+
+void ANAItemActor::InitCheckIfChildActor()
+{
+	if ( HasAuthority() )
+	{
+		bWasChildActor = IsChildActor();
+	}
+
+	// ChildActorComponent에 의해 생성된 경우
+	if (bWasChildActor || GetAttachParentActor() ||
+		(RootComponent && RootComponent->GetAttachParent()
+			&& RootComponent->GetAttachParent()->IsA<UChildActorComponent>()))
+	{
+		if (ItemCollision)
+		{
+			ItemCollision->SetSimulatePhysics(false);
+			ItemCollision->SetGenerateOverlapEvents( false );
+			ItemCollision->SetCollisionResponseToAllChannels( ECR_Ignore );
+			ItemCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+		if (TriggerSphere)
+		{
+			TriggerSphere->Deactivate();
+			TriggerSphere->SetSimulatePhysics(false);
+			TriggerSphere->SetGenerateOverlapEvents(false);
+			TriggerSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+		if (ItemWidgetComponent)
+		{
+			CollapseItemWidgetComponent();
+		}
+		if (ItemMesh)
+		{
+			ItemMesh->SetCollisionEnabled( ECollisionEnabled::NoCollision );
+			ItemMesh->SetSimulatePhysics( false );
+			ItemMesh->SetGenerateOverlapEvents(false);
+		}
+	}
+	else
+	{
+		// 콜리전, 피직스 등등 설정 여기에
+		if (ItemCollision)
+		{
+			ItemCollision->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+			if ( HasAuthority() )
+			{
+				// 서버에서만 물리 시뮬레이션을 수행
+				ItemCollision->SetSimulatePhysics( true );	
+				ItemCollision->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+			}
+			else
+			{
+				ItemCollision->SetSimulatePhysics( false );
+				ItemCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				ItemCollision->SetCollisionResponseToAllChannels( ECR_Ignore );
+			}
+			ItemCollision->SetGenerateOverlapEvents( true );
+			ItemCollision->SetIsReplicated( true );
+		}
+		if (ItemMesh)
+		{
+			ItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			ItemMesh->SetSimulatePhysics(false);
+			ItemMesh->SetGenerateOverlapEvents(false);
+		}
+	}
+}
+
+void ANAItemActor::OnActorBeginOverlap_Impl(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	Execute_NotifyInteractableFocusBegin(this, OverlappedComponent->GetOwner(), OtherActor);
+}
+
+void ANAItemActor::OnActorEndOverlap_Impl(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+	Execute_NotifyInteractableFocusEnd(this,  OverlappedComponent->GetOwner(), OtherActor);
+}
+
+void ANAItemActor::BeginPlay()
+{
+	if (bNeedItemCollision)
+	{
+		ReplaceRootWithItemCollisionIfNeeded();
+	}
+	
+	Super::BeginPlay();
+
+	InitCheckIfChildActor();
+	
+	if (InteractableInterfaceRef && TriggerSphere)
+	{
+		TriggerSphere->OnComponentBeginOverlap.AddUniqueDynamic(this, &ThisClass::OnActorBeginOverlap_Impl);
+		TriggerSphere->OnComponentEndOverlap.AddUniqueDynamic(this, &ThisClass::OnActorEndOverlap_Impl);
+
+		// 다음 틱에서 수동으로 오버랩 델리게이트를 직접 브로드캐스트
+		GetWorldTimerManager().SetTimerForNextTick(this, &ThisClass::BroadcastInitialOverlapsOnTriggerSphere);
+	}
+	
+	if (HasValidItemID())
+	{
+		// 임시: 수량 랜덤
+		if (GetItemData()->IsStackableItem())
+		{
+			int32 RandomNumber = FMath::RandRange(1, GetItemData()->GetItemMaxSlotStackSize());
+			GetItemData()->SetQuantity(RandomNumber);
+		}
+		else
+		{
+			GetItemData()->SetQuantity(1);
+		}
+	}
+}
+
+void ANAItemActor::BroadcastInitialOverlapsOnTriggerSphere()
+{
+	if (!TriggerSphere ||
+		!TriggerSphere->GetGenerateOverlapEvents()) return;
+	
+	// 이미 겹친 액터들 가져와서 일괄 처리
+	TArray<AActor*> Overlaps;
+	TriggerSphere->GetOverlappingActors(Overlaps, ANACharacter::StaticClass());
+	for (AActor* Other : Overlaps)
+	{
+		TriggerSphere->OnComponentBeginOverlap.Broadcast(
+			TriggerSphere,
+			Other,
+			Cast<UPrimitiveComponent>(Other->GetRootComponent()),
+			0,
+			false,
+			FHitResult{}
+		);
+	}
+}
+void ANAItemActor::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+}
+
+UNAItemData* ANAItemActor::GetItemData() const
+{
+	return UNAItemEngineSubsystem::Get()->GetRuntimeItemData(ItemDataID);
+}
+
+bool ANAItemActor::HasValidItemID() const
+{
+	return !ItemDataID.IsNone();
+}
+
+//======================================================================================================================
+// Interactable Interface Implements
+//======================================================================================================================
+
+bool ANAItemActor::CanInteract_Implementation() const
+{
+	return IsValid(TriggerSphere)
+			&& InteractableInterfaceRef != nullptr && bIsFocused;
+}
+
+bool ANAItemActor::IsOnInteract_Implementation() const
+{
+	return bIsOnInteract;
+}
+
+void ANAItemActor::NotifyInteractableFocusBegin_Implementation(AActor* InteractableActor, AActor* InteractorActor)
+{
+	if (UNAInteractionComponent* InteractionComp = GetInteractionComponent(InteractorActor))
+	{
+		// FString ItemName = InteractorActor ? GetNameSafe(InteractableActor) : TEXT_NULL;
+		// FString InteractorName = InteractorActor ? GetNameSafe(InteractorActor) : TEXT_NULL;
+		// UE_LOG(LogTemp, Warning, TEXT("[NotifyInteractableFocusBegin]  포커스 On 알림 - 아이템: %s, 행위자: %s")
+		// 	, *ItemName, *InteractorName);
+		
+		bIsFocused = InteractionComp->OnInteractableFound(this);
+		if (bIsFocused && IsValid(ItemWidgetComponent))
+		{
+			ReleaseItemWidgetComponent();
+		}
+	}
+}
+
+void ANAItemActor::NotifyInteractableFocusEnd_Implementation(AActor* InteractableActor, AActor* InteractorActor)
+{
+	if (UNAInteractionComponent* InteractionComp = GetInteractionComponent(InteractorActor))
+	{
+		// FString ItemName = InteractorActor ? GetNameSafe(InteractableActor) : TEXT_NULL;
+		// FString InteractorName = InteractorActor ? GetNameSafe(InteractorActor) : TEXT_NULL;
+		// UE_LOG(LogTemp, Warning, TEXT("[NotifyInteractableFocusEnd]  포커스 Off 알림 - 아이템: %s, 행위자: %s")
+		// 	, *ItemName, *InteractorName);
+		
+		bIsFocused = !InteractionComp->OnInteractableLost(this);
+		if (!bIsFocused && IsValid(ItemWidgetComponent))
+		{
+			CollapseItemWidgetComponent();
+		}
+	}
+}
+
+bool ANAItemActor::TryInteract_Implementation(AActor* Interactor)
+{
+	bIsOnInteract = true;
+	SetInteractionPhysicsEnabled(false);
+	
+	if (Execute_BeginInteract(this, Interactor))
+	{
+		if (Execute_ExecuteInteract(this, Interactor))
+		{
+			if (Execute_EndInteract(this, Interactor))
+			{
+				if (!IsUnlimitedInteractable())
+				{
+					SetInteractableCount(GetInteractableCount() - 1);
+				}
+				
+				UE_LOG(LogTemp, Warning, TEXT("[TryInteract]  상호작용 사이클 완료"));
+				SetInteractionPhysicsEnabled(true);
+				bIsOnInteract = false;
+				return true;
+			}
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[TryInteract]  상호작용 사이클 중단"));
+	SetInteractionPhysicsEnabled(true);
+	bIsOnInteract = false;
+	return false;
+}
+
+bool ANAItemActor::BeginInteract_Implementation(AActor* InteractorActor)
+{
+	if (!Execute_CanInteract(this)) { return false; }
+	if (!CanPerformInteractionWith(InteractorActor))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[BeginInteract]  상호작용 조건 불충분"));
+		return false;
+	}
+	return bIsOnInteract;
+}
+
+bool ANAItemActor::ExecuteInteract_Implementation(AActor* InteractorActor)
+{
+	ensureAlwaysMsgf(bIsOnInteract, TEXT("[ExecuteInteract_Implementation]  bIsOnInteract이 false였음"));
+	return bIsOnInteract;
+}
+
+bool ANAItemActor::EndInteract_Implementation(AActor* InteractorActor)
+{
+	return bIsOnInteract;
+}
+
+bool ANAItemActor::TryGetInteractableData(FNAInteractableData& OutData) const
+{
+	if (UNAItemData* ItemData = GetItemData())
+	{
+		return ItemData->GetInteractableData(OutData);
+	}
+	return false;
+}
+
+bool ANAItemActor::HasInteractionDelay() const
+{
+	FNAInteractableData Data;
+	if (GetItemData() && GetItemData()->GetInteractableData(Data))
+	{
+		return Data.InteractionDelayTime > 0.f;
+	}
+	return false;
+}
+
+float ANAItemActor::GetInteractionDelay() const
+{
+	FNAInteractableData Data;
+	if (GetItemData() && GetItemData()->GetInteractableData(Data))
+	{
+		return Data.InteractionDelayTime;
+	}
+	return 0.f;
+}
+
+bool ANAItemActor::IsAttachedAndPendingUse() const
+{
+	return bIsAttachedAndPendingUse && IsChildActor();
+}
+
+void ANAItemActor::SetAttachedAndPendingUse(bool bNewState)
+{
+	if (bNewState && !IsChildActor())
+	{
+		ensureAlways(false);
+		return;
+	}
+	
+	bIsAttachedAndPendingUse = bNewState;
+}
+
+bool ANAItemActor::IsUnlimitedInteractable() const
+{
+	FNAInteractableData Data;
+	if (TryGetInteractableData(Data))
+	{
+		return Data.bIsUnlimitedInteractable;
+	}
+	return false;
+}
+
+int32 ANAItemActor::GetInteractableCount() const
+{
+	FNAInteractableData Data;
+	if (TryGetInteractableData(Data))
+	{
+		return Data.InteractableCount;
+	}
+	return -1;
+}
+
+void ANAItemActor::SetInteractableCount(int32 NewCount)
+{
+	FNAInteractableData Data;
+	if (TryGetInteractableData(Data))
+	{
+		Data.InteractableCount = NewCount;
+	}
+}
+
+bool ANAItemActor::CanPerformInteractionWith(AActor* Interactor) const
+{
+	bool bCanPerform = Interactor && GetInteractionComponent(Interactor);
+	
+	FNAInteractableData Data;
+	if (TryGetInteractableData(Data))
+	{
+		bCanPerform = bCanPerform && Data.InteractableType != ENAInteractableType::None;
+		if (!Data.bIsUnlimitedInteractable)
+		{
+			bCanPerform = bCanPerform && Data.InteractableCount > 0;
+		}
+		return bCanPerform;
+	}
+	return bCanPerform;
+}
+
+ANAItemWidgetPopupActor::ANAItemWidgetPopupActor()
+{
+	PrimaryActorTick.bCanEverTick = false;
+
+	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("PopupSceneRoot")));
+}
+
+void ANAItemWidgetPopupActor::InitializePopup(UNAItemWidgetComponent* NewPopupWidgetComponent)
+{
+	if (HasActorBegunPlay() && GetRootComponent() && !PopupWidgetComponent
+		&& NewPopupWidgetComponent && NewPopupWidgetComponent->GetItemWidget())
+	{
+		NewPopupWidgetComponent->Rename(nullptr, this,REN_DontCreateRedirectors | REN_DoNotDirty);
+		PopupWidgetComponent = NewPopupWidgetComponent;
+		AddInstanceComponent(PopupWidgetComponent);
+		PopupWidgetComponent->AttachToComponent(GetRootComponent(),FAttachmentTransformRules::KeepWorldTransform);
+		if (!PopupWidgetComponent->HasBeenCreated())
+		{
+			PopupWidgetComponent->OnComponentCreated();
+		}
+		PopupWidgetComponent->RegisterComponent();
+
+		PopupWidgetComponent->GetItemWidget()->OnItemWidgetCollapseFinishedForDestroy.BindUObject(this, &ThisClass::OnCollapseAnimationFinished);
+		PopupWidgetComponent->CollapseItemWidgetPopup();
+	}
+}
+
+void ANAItemWidgetPopupActor::OnCollapseAnimationFinished()
+{
+	Destroy();
+}
+
+----------------------------------------------------------------------------------------------------------------------
+
+## NAItemData.h
+
+#pragma once
+#include "Item/ItemDataStructs/NAItemBaseDataStructs.h"
+
+#include "NAItemData.generated.h"
+
+UENUM(BlueprintType)
+enum class EItemState : uint8
+{
+	IS_None            UMETA(DisplayName = "None"),           // 초기화 필요
+
+	IS_Acquired        UMETA(DisplayName = "Acquired"),       // 인벤토리에 획득된 상태
+	IS_Active          UMETA(DisplayName = "Active"),         // 사용 가능 상태
+	IS_Inactive        UMETA(DisplayName = "Inactive"),       // 사용 불가 (조건 불충족, 쿨다운 등)
+	IS_Consumed        UMETA(DisplayName = "Consumed"),       // 사용 후 사라진 상태
+	IS_Disabled        UMETA(DisplayName = "Disabled"),       // 의도적으로 비활성화된 상태
+	IS_Locked          UMETA(DisplayName = "Locked"),         // 특정 조건을 만족해야 사용할 수 있음
+	IS_Expired         UMETA(DisplayName = "Expired"),        // 유효기간 경과 등으로 무효 상태
+	IS_Hidden          UMETA(DisplayName = "Hidden"),          // UI 등에서 숨김 처리
+	IS_Equipped        UMETA(DisplayName = "Equipped"),          // 착용 중인 장비 아이템 전용
+	IS_Broken          UMETA(DisplayName = "Broken"),          // 내구도가 0이 되어 작동하지 않는 상태
+	IS_Pending         UMETA(DisplayName = "Pending"),          // 네트워크 처리 중이거나, UI 연출 중 잠시 대기 상태
+	IS_PreviewOnly     UMETA(DisplayName = "PreviewOnly"),          // 월드에 있지만 상호작용할 수 없는 상태 (예: 상점 프리뷰)
+};
+
+/**
+ * @TODO: UNAItemData의 생성 방법 정립하기: UNAItemData의 생성/파괴 생명 주기 관리는 !반드시 UNAItemGameInstanceSubsystem에 의해서만 수행되어야 함!
+ * @TODO: 1) ANAItemActor의 PostRegisterAllComponents 단계에서(ANAItemActor::InitItemData_Internal), UNAItemGameInstanceSubsystem::CreateItemData에 의해 생성됨 => 즉 아이템 객체(Data + Actor) 생성 순서가 Actor → Data인 경우 [0]
+ * @TODO: 2) 아이템 객체 생성 순서가 Data → Actor인 경우에는? (ex. 플레이어의 인벤토리에 소지된 아이템(: Data로서 존재)... 인벤토리에서 꺼내질 때 Actor가 필요함) [...]
+ * @TODO: 3) 월드에서 리젠되는 아이템(채집 아이템 또는 스포너에 의해 동적 스폰되는 몬스터가 소지한 아이템 등)은 생성 당시에 Actor가 필요 없음 → 즉 아이템 Data만 생성되어야 하는 경우 [...]
+ */
+UCLASS(Transient, BlueprintType)
+class ARPG_API UNAItemData final : public UObject
+{
+	GENERATED_BODY()
+
+	friend class UNAItemEngineSubsystem;
+public:
+	UNAItemData();
+
+	virtual void PostInitProperties() override;
+
+	UFUNCTION(BlueprintCallable, Category = "Item Data")
+	int32 GetQuantity() const { return Quantity; }
+	
+	UFUNCTION(BlueprintCallable, Category = "Item Data")
+	void SetQuantity(const int32 NewQuantity);
+
+	UFUNCTION(BlueprintCallable, Category = "Item Data")
+	EItemState GetItemState() const { return ItemState; }
+	
+	UFUNCTION(BlueprintCallable, Category = "Item Data")
+	void SetItemState(EItemState NewItemState);
+
+	template<typename ItemDataStructT = FNAItemBaseTableRow>
+		requires TIsDerivedFrom<ItemDataStructT, FNAItemBaseTableRow>::IsDerived
+	const ItemDataStructT* GetItemMetaDataStruct() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Item Data")
+	FORCEINLINE FName GetItemID() const { return ID; }
+
+	UFUNCTION(BlueprintCallable, Category = "Item Data")
+	EItemType GetItemType() const;
+	
+	bool operator==(const FName& OtherID) const
+	{
+		return ID == OtherID;
+	}
+
+	UClass* GetItemActorClass() const;
+	class UNAInventoryComponent* GetOwningInventory() const
+	{
+		return OwningInventory.Get();
+	}
+	
+	FString GetItemName() const;
+	FText GetItemDescription() const;
+
+	class UTexture2D* GetItemIcon() const;
+	
+	UFUNCTION(BlueprintCallable, Category = "Item Data")
+	bool IsPickableItem() const;
+	UFUNCTION(BlueprintCallable, Category = "Item Data")
+	bool IsStackableItem() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Item Data")
+	int32 GetItemMaxSlotStackSize() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Item Data")
+	int32 GetMaxInventoryHoldCount() const;
+
+	void SetOwningInventory(UNAInventoryComponent* NewInventory);
+
+	bool TryUseItem(AActor* User);
+
+	bool GetInteractableData(FNAInteractableData& OutData) const;
+
+	bool IsCurrencyItem() const;
+	
+private:
+	UPROPERTY(DuplicateTransient,
+		VisibleAnywhere, BlueprintReadOnly, Category = "Item Data", meta=(AllowPrivateAccess = "true"))
+	FName ID = NAME_None;  // 아이템 ID (DT 행 이름 + 숫자)
+
+	/** 객체가 생성될 때마다 ++ 하여 ID 를 뽑아 주는 원자적 카운터 */
+	static FThreadSafeCounter IDCount;
+	int32 IDNumber = -1;
+
+protected:
+	UPROPERTY(VisibleAnywhere, Category = "Item Data", meta = (UIMin = 1, UIMax = 100))
+	int32 Quantity = 1;	// 이 아이템 인스턴스의 현재 수량
+
+	UPROPERTY(EditAnywhere, Category = "Item Data")
+	EItemState ItemState = EItemState::IS_None;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Item Meta Data")
+	FDataTableRowHandle ItemMetaDataHandle;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Item Ownership")
+	TWeakObjectPtr<class UNAInventoryComponent> OwningInventory = nullptr;
+};
+
+template<typename ItemDataStructT> requires TIsDerivedFrom<ItemDataStructT, FNAItemBaseTableRow>::IsDerived
+const ItemDataStructT* UNAItemData::GetItemMetaDataStruct() const
+{
+	if (ItemMetaDataHandle.IsNull())
+	{
+		return nullptr;
+	}
+
+	ItemDataStructT* ItemMetaDataStruct = ItemMetaDataHandle.GetRow<ItemDataStructT>(ItemMetaDataHandle.RowName.ToString());
+	if (!ItemMetaDataStruct)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[UNAItemData::GetItemMetaDataStruct]  아이템 메타 데이터 읽기 실패.  %s"), *ItemMetaDataHandle.ToDebugString());
+		return nullptr;
+	}
+
+	return ItemMetaDataStruct;
+}
+
+----------------------------------------------------------------------------------------------------------------------
+
+## NAItemData.cpp
+
+#include "Item/ItemData/NAItemData.h"
+
+#include "AbilitySystemInterface.h"
+#include "Item/ItemActor/NAItemActor.h"
+#include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
+
+#include "Inventory/Component/NAInventoryComponent.h"
+#include "Item/NAItemUseInterface.h"
+
+// 프로그램 시작 시 0 에서 시작
+FThreadSafeCounter UNAItemData::IDCount(0);
+
+UNAItemData::UNAItemData()
+{
+	if (!HasAnyFlags(RF_ClassDefaultObject)) {
+		IDNumber = IDCount.Increment();
+	}
+	ID = NAME_None;
+}
+
+void UNAItemData::PostInitProperties()
+{
+	Super::PostInitProperties();
+}
+
+void UNAItemData::SetQuantity(const int32 NewQuantity)
+{
+	if (NewQuantity != Quantity)
+	{
+		if (const FNAItemBaseTableRow* ItemMetaData = GetItemMetaDataStruct<FNAItemBaseTableRow>()) {
+			Quantity = FMath::Clamp(NewQuantity, 0,
+				ItemMetaData->NumericData.bIsStackable ? ItemMetaData->NumericData.MaxSlotStackSize : 1);
+		}
+	}
+}
+
+void UNAItemData::SetItemState(EItemState NewItemState)
+{
+	if (ItemState != NewItemState)
+	{
+		ItemState = NewItemState;
+		// 델리게이트?
+	}
+}
+
+EItemType UNAItemData::GetItemType() const
+{
+	if (const FNAItemBaseTableRow* ItemDataStruct = GetItemMetaDataStruct())
+	{
+		return ItemDataStruct->ItemType;
+	}
+	return EItemType::IT_None;
+}
+
+UClass* UNAItemData::GetItemActorClass() const
+{
+	if (const FNAItemBaseTableRow* ItemMetaData = GetItemMetaDataStruct())
+	{
+		return ItemMetaData->ItemClass.Get();
+	}
+	return nullptr;
+}
+
+FString UNAItemData::GetItemName() const
+{
+	if (const FNAItemBaseTableRow* ItemMetaData = GetItemMetaDataStruct())
+	{
+		return ItemMetaData->TextData.Name.ToString();
+	}
+	return {};
+}
+
+FText UNAItemData::GetItemDescription() const
+{
+	if (const FNAItemBaseTableRow* ItemMetaData = GetItemMetaDataStruct())
+	{
+		return ItemMetaData->TextData.Description;
+	}
+	return FText::GetEmpty();
+}
+
+class UTexture2D* UNAItemData::GetItemIcon() const
+{
+	if (const FNAItemBaseTableRow* ItemMetaData = GetItemMetaDataStruct())
+	{
+		return ItemMetaData->IconAssetData.ItemIcon;
+	}
+	return nullptr;
+}
+
+bool UNAItemData::IsPickableItem() const
+{
+	if (const FNAItemBaseTableRow* ItemMetaData = GetItemMetaDataStruct())
+	{
+		return ItemMetaData->ItemType != EItemType::IT_None && ItemMetaData->ItemType != EItemType::IT_Misc;
+	}
+	return false;
+}
+
+bool UNAItemData::IsStackableItem() const
+{
+	if (const FNAItemBaseTableRow* ItemMetaData = GetItemMetaDataStruct())
+	{
+		return ItemMetaData->NumericData.bIsStackable;
+	}
+	return false;
+}
+
+int32 UNAItemData::GetItemMaxSlotStackSize() const
+{
+	if (const FNAItemBaseTableRow* ItemMetaData = GetItemMetaDataStruct())
+	{
+		return ItemMetaData->NumericData.MaxSlotStackSize;
+	}
+	return -1;
+}
+
+int32 UNAItemData::GetMaxInventoryHoldCount() const
+{
+	if (const FNAItemBaseTableRow* ItemMetaData = GetItemMetaDataStruct())
+	{
+		return ItemMetaData->NumericData.MaxInventoryHoldCount;
+	}
+	return -1;
+}
+
+void UNAItemData::SetOwningInventory(UNAInventoryComponent* NewInventory)
+{
+	if (NewInventory != nullptr)
+	{
+		OwningInventory = NewInventory;
+	}
+}
+
+bool UNAItemData::TryUseItem(AActor* User)
+{
+	UClass* ItemClass = GetItemActorClass();
+	if (!ItemClass) return false;
+
+	UObject* CDO = ItemClass->GetDefaultObject(false);
+	if (!CDO) return false;
+
+	bool bSucceed = false;
+	if (INAItemUseInterface* ItemUseInterface = Cast<INAItemUseInterface>(CDO))
+	{
+		if (!ItemUseInterface->CanUseItem(this, User)) return false;
+		
+		int32 UsedAmount = 0;
+		bSucceed = ItemUseInterface->UseItem(this, User, UsedAmount);
+		if (bSucceed && UsedAmount > 0)
+		{
+			int32 PredictedQuantity = Quantity - UsedAmount;
+		
+			if (OwningInventory.IsValid())
+			{
+				// 인벤토리 위젯에 리드로우 해야하는 상황(아이템 수량 및 상태 변경 등)이면 인벤토리 컴포넌트에 위젯 리드로우 요청
+				// 수량이 0이하면 인벤토리 컴포넌트에서 아이템 데이터 제거까지 수행
+				return OwningInventory->TryRemoveItem(ID, UsedAmount);
+			}
+			
+			if (PredictedQuantity <= 0)
+			{
+				// 인벤토리에 보관된 아이템이 아닌 경우, 아이템 엔진 서브시스템에 직접 아이템 데이터 & 아이템 액터까지 제거 요청
+				if (UNAItemEngineSubsystem::Get())
+				{
+					return UNAItemEngineSubsystem::Get()->DestroyRuntimeItemData(ID, true);
+				}
+			}
+			else
+			{
+				SetQuantity(PredictedQuantity);
+			}
+		}
+	}
+	return bSucceed;
+}
+
+bool UNAItemData::GetInteractableData(FNAInteractableData& OutData) const
+{
+	if (!ID.IsNone())
+	{
+		if (const FNAItemBaseTableRow* ItemMetaData = GetItemMetaDataStruct())
+		{
+			OutData = ItemMetaData->InteractableData;
+			return true;
+		}
+	}
+	return false;
+}
+
+bool UNAItemData::IsCurrencyItem() const
+{
+	return GetItemType() == EItemType::IT_UpgradeNode
+		|| GetItemType() == EItemType::IT_Credit;
+}
+
