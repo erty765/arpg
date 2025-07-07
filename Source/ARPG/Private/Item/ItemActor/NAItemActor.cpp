@@ -217,37 +217,43 @@ EItemSubobjDirtyFlags ANAItemActor::GetDirtySubobjectFlags(
 
 void ANAItemActor::ReplaceRootWithItemCollisionIfNeeded()
 {
+	if (!GetWorld()->IsGameWorld()) return;
+	
 	if (!bNeedItemCollision || !ItemCollision) return;
-
-	FTransform PreviousTransform = GetRootComponent()->GetComponentTransform();
+	USceneComponent* PreviousRootComponent = GetRootComponent();
+	
+	if (PreviousRootComponent == ItemCollision) return;
+	FTransform PreviousTransform = PreviousRootComponent->GetComponentTransform();
 	
 	TArray<USceneComponent*> PreviousChildren;
-	PreviousChildren.Reserve(GetComponents().Num());
-	for (auto It = GetComponents().CreateConstIterator(); It; ++It)
-	{
-		if (USceneComponent* Child = Cast<USceneComponent>(*It))
-		{
-			if (!Child->GetAttachParent()) continue;
-			if (Child == GetRootComponent()) continue;
+	PreviousRootComponent->GetChildrenComponents(false, PreviousChildren);
 
-			Child->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
-			PreviousChildren.Add(Child);
+	for ( auto It = PreviousChildren.CreateConstIterator(); It; ++It )
+	{
+		if ( USceneComponent* Attachable = Cast<USceneComponent>( *It ))
+		{
+			Attachable->DetachFromComponent( FDetachmentTransformRules::KeepRelativeTransform );
 		}
 	}
-	GetRootComponent()->ClearFlags(RF_Standalone | RF_Public);
-	RemoveInstanceComponent(GetRootComponent());
-	GetRootComponent()->DestroyComponent();
 	
+	PreviousRootComponent->ClearFlags(RF_Standalone | RF_Public);
+	RemoveInstanceComponent(PreviousRootComponent);
+	PreviousRootComponent->DestroyComponent();
+	StubRootComponent = nullptr;
 	SetRootComponent(ItemCollision);
-	ItemCollision->SetWorldTransform(PreviousTransform);
+	
 	if (PreviousChildren.Num() > 0)
 	{
 		for (USceneComponent* Child : PreviousChildren)
 		{
 			if (Child == ItemCollision) continue;
-
 			Child->AttachToComponent(ItemCollision, FAttachmentTransformRules::KeepRelativeTransform);
 		}
+	}
+	
+	if (HasAuthority())
+	{
+		ItemCollision->SetWorldTransform(PreviousTransform);
 	}
 }
 
@@ -271,11 +277,6 @@ void ANAItemActor::OnConstruction(const FTransform& Transform)
 	const FNAItemBaseTableRow* MetaData
 		= UNAItemEngineSubsystem::Get()->GetItemMetaDataByClass(GetClass());
 	if (!MetaData) return;
-
-	// 어태치먼트
-    FTransform PreviousTransform = HasAnyFlags(RF_ClassDefaultObject)
-	                                   ? FTransform::Identity
-	                                   : GetRootComponent()->GetComponentTransform();
 
 	const EItemSubobjDirtyFlags DirtyFlags = GetDirtySubobjectFlags(MetaData);
 	UClass* NewItemCollisionClass = nullptr;
@@ -364,8 +365,7 @@ void ANAItemActor::OnConstruction(const FTransform& Transform)
 		{
 			if (SubObjsActorComponents.Contains( OwnedComponent ))
 			{
-				if (OwnedSceneComp != GetRootComponent()
-					&& OwnedSceneComp->GetAttachParent() != GetRootComponent())
+				if (OwnedSceneComp != GetRootComponent() && OwnedSceneComp->GetAttachParent() == nullptr)
 				{
 					OwnedSceneComp->AttachToComponent(GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
 				}
@@ -415,15 +415,17 @@ void ANAItemActor::OnConstruction(const FTransform& Transform)
 			SkeletalMeshComp->SetAnimClass(MetaData->SkeletalMeshAssetData.AnimClass);
 		}
 	}
-	RegisterAllComponents();
 	
 	if (GetRootComponent())
 	{
-		GetRootComponent()->SetWorldTransform(PreviousTransform);
+		GetRootComponent()->SetWorldTransform(Transform);
 	}
 	if (ItemCollision)
 	{
-		ItemCollision->SetRelativeTransform(FTransform::Identity);
+		if (GetRootComponent() != ItemCollision)
+		{
+			ItemCollision->SetRelativeTransform(FTransform::Identity);
+		}
 		ItemCollision->SetNetAddressable();
 	}
 	if (ItemMesh)
@@ -432,46 +434,19 @@ void ANAItemActor::OnConstruction(const FTransform& Transform)
 	}
 }
 
-void ANAItemActor::UnregisterAllComponents(bool bForReregister)
+void ANAItemActor::PreRegisterAllComponents()
 {
-#if WITH_EDITOR
-	if ( !bForReregister )
+	Super::PreRegisterAllComponents();
+}
+
+void ANAItemActor::PostRegisterAllComponents()
+{
+	Super::PostRegisterAllComponents();
+
+	if (bNeedItemCollision)
 	{
-		bool bDirty = false;
-		TArray<USceneComponent*> TransientComponents = { ItemMesh, ItemCollision };
-	
-		for ( USceneComponent* OwnedTransient : TransientComponents )
-		{
-			if ( OwnedTransient )
-			{
-				if ( OwnedTransient->GetAttachParent() )
-				{
-					OwnedTransient->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
-				}
-				bDirty = true;
-			}
-		}
-
-		for ( TFieldIterator<FObjectProperty> It( GetClass() ); It; ++It )
-		{
-			if ( It->PropertyClass->IsChildOf( USceneComponent::StaticClass() ) )
-			{
-				USceneComponent* Component = It->ContainerPtrToValuePtr<USceneComponent>( this );
-				if ( Component->GetAttachParent() && TransientComponents.Contains( Component->GetAttachParent() ) )
-				{
-					Component->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
-				}
-			}
-		}
-
-		if ( bDirty )
-		{
-			//MarkPackageDirty();
-			//CollectGarbage(RF_NoFlags);
-		}
+		ReplaceRootWithItemCollisionIfNeeded();
 	}
-#endif
-	Super::UnregisterAllComponents(bForReregister);	
 }
 
 void ANAItemActor::Destroyed()
@@ -635,11 +610,6 @@ void ANAItemActor::OnActorEndOverlap_Impl(UPrimitiveComponent* OverlappedCompone
 
 void ANAItemActor::BeginPlay()
 {
-	if (bNeedItemCollision)
-	{
-		ReplaceRootWithItemCollisionIfNeeded();
-	}
-	
 	Super::BeginPlay();
 
 	InitCheckIfChildActor();
@@ -723,15 +693,21 @@ void ANAItemActor::NotifyInteractableFocusBegin_Implementation(AActor* Interacta
 {
 	if (UNAInteractionComponent* InteractionComp = GetInteractionComponent(InteractorActor))
 	{
-		// FString ItemName = InteractorActor ? GetNameSafe(InteractableActor) : TEXT_NULL;
-		// FString InteractorName = InteractorActor ? GetNameSafe(InteractorActor) : TEXT_NULL;
-		// UE_LOG(LogTemp, Warning, TEXT("[NotifyInteractableFocusBegin]  포커스 On 알림 - 아이템: %s, 행위자: %s")
-		// 	, *ItemName, *InteractorName);
-		
-		bIsFocused = InteractionComp->OnInteractableFound(this);
-		if (bIsFocused && IsValid(ItemWidgetComponent))
+		if (const APawn* MaybePawn = Cast<APawn>(InteractorActor) )
 		{
-			ReleaseItemWidgetComponent();
+			if ( MaybePawn->IsLocallyControlled() )
+			{
+				FString ItemName = InteractorActor ? GetNameSafe(InteractableActor) : TEXT_NULL;
+				FString InteractorName = InteractorActor ? GetNameSafe(InteractorActor) : TEXT_NULL;
+				UE_LOG(LogTemp, Warning, TEXT("[NotifyInteractableFocusBegin]  포커스 On 알림 - 아이템: %s, 행위자: %s")
+					, *ItemName, *InteractorName);
+		
+				bIsFocused = InteractionComp->OnInteractableFound(this);
+				if (bIsFocused && IsValid(ItemWidgetComponent))
+				{
+					ReleaseItemWidgetComponent();
+				}
+			}
 		}
 	}
 }
@@ -740,15 +716,21 @@ void ANAItemActor::NotifyInteractableFocusEnd_Implementation(AActor* Interactabl
 {
 	if (UNAInteractionComponent* InteractionComp = GetInteractionComponent(InteractorActor))
 	{
-		// FString ItemName = InteractorActor ? GetNameSafe(InteractableActor) : TEXT_NULL;
-		// FString InteractorName = InteractorActor ? GetNameSafe(InteractorActor) : TEXT_NULL;
-		// UE_LOG(LogTemp, Warning, TEXT("[NotifyInteractableFocusEnd]  포커스 Off 알림 - 아이템: %s, 행위자: %s")
-		// 	, *ItemName, *InteractorName);
-		
-		bIsFocused = !InteractionComp->OnInteractableLost(this);
-		if (!bIsFocused && IsValid(ItemWidgetComponent))
+		if (const APawn* MaybePawn = Cast<APawn>(InteractorActor) )
 		{
-			CollapseItemWidgetComponent();
+			if ( MaybePawn->IsLocallyControlled() )
+			{
+				FString ItemName = InteractorActor ? GetNameSafe(InteractableActor) : TEXT_NULL;
+				FString InteractorName = InteractorActor ? GetNameSafe(InteractorActor) : TEXT_NULL;
+				UE_LOG(LogTemp, Warning, TEXT("[NotifyInteractableFocusEnd]  포커스 Off 알림 - 아이템: %s, 행위자: %s")
+					, *ItemName, *InteractorName);
+
+				bIsFocused = !InteractionComp->OnInteractableLost(this);
+				if (!bIsFocused && IsValid(ItemWidgetComponent))
+				{
+					CollapseItemWidgetComponent();
+				}
+			}
 		}
 	}
 }

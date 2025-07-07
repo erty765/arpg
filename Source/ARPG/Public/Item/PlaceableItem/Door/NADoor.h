@@ -4,7 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Item/ItemActor/NAPlaceableItemActor.h"
-#include "NAPlaceableItemActor_Door.generated.h"
+#include "NADoor.generated.h"
+
 
 UENUM(Blueprintable)
 enum class EDoorType : uint8
@@ -18,7 +19,7 @@ DECLARE_DELEGATE_RetVal_OneParam(bool, FOnTickInteraction, AActor*);
 DECLARE_DYNAMIC_DELEGATE_RetVal_OneParam(bool, FOnGimicClear, AActor*, InActor);
 
 UCLASS(Abstract)
-class ARPG_API ANAPlaceableItemActor_Door : public ANAPlaceableItemActor
+class ARPG_API ANADoor : public ANAPlaceableItemActor
 {
 	friend class ANAPlayerController;
 	
@@ -26,7 +27,7 @@ class ARPG_API ANAPlaceableItemActor_Door : public ANAPlaceableItemActor
 	
 public:
 	// Sets default values for this actor's properties
-	ANAPlaceableItemActor_Door(const FObjectInitializer& ObjectInitializer);
+	ANADoor(const FObjectInitializer& ObjectInitializer);
 
 	virtual void PostRegisterAllComponents() override;
 	virtual void OnConstruction(const FTransform& Transform) override;

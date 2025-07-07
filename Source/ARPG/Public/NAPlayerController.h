@@ -6,7 +6,7 @@
 #include "GameFramework/PlayerController.h"
 #include "NAPlayerController.generated.h"
 
-class ANAPlaceableItemActor_Door;
+class ANADoor;
 class UNASessionListEntryData;
 /**
  * 
@@ -27,10 +27,10 @@ public:
 	void Multi_RemoveFailedWidget();
 
 	UFUNCTION( Server, Reliable )
-	void Server_ToggleDoor( ANAPlaceableItemActor_Door* Door );
+	void Server_ToggleDoor( ANADoor* Door );
 
 	UFUNCTION( NetMulticast, Reliable )
-	void Multi_ToggleDoor( ANAPlaceableItemActor_Door* Door );
+	void Multi_ToggleDoor( ANADoor* Door );
 
 protected:
 	virtual void BeginPlay() override;

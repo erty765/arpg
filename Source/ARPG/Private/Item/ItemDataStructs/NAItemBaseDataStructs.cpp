@@ -2,9 +2,9 @@
 #include "Item/PickableItem/NAWeapon.h"
 #include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
 #include "Item/ItemActor/NAPlaceableItemActor.h"
-#include "Item/PickableItem/NAUpgradeNode.h"
+#include "Item/PickableItem/NAPowerNode.h"
 #include "Misc/StringUtils.h"
-#include "Item/PickableItem/NAUpgradeNode.h"
+#include "Item/PickableItem/NAPowerNode.h"
 
 #if WITH_EDITOR
 
@@ -77,12 +77,12 @@ void FNAItemBaseTableRow::OnDataTableChanged(const UDataTable* InDataTable, cons
 			InteractableData.InteractableCount = 0;
 		}
 
-		if (ItemClass.Get()->IsChildOf<ANAUpgradeNode>())
+		if (ItemClass.Get()->IsChildOf<ANAPowerNode>())
 		{
-			ItemType = EItemType::IT_UpgradeNode;
+			ItemType = EItemType::IT_PowerNode;
 		}
 
-		if (ItemType == EItemType::IT_Credit || ItemType == EItemType::IT_UpgradeNode)
+		if (ItemType == EItemType::IT_Credit || ItemType == EItemType::IT_PowerNode)
 		{
 			NumericData.bIsStackable = true;
 			NumericData.MaxSlotStackSize = 0;

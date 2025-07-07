@@ -4,20 +4,20 @@
 
 #include "CoreMinimal.h"
 #include "Item/ItemActor/NAPlaceableItemActor.h"
-#include "NAPlaceableItem_NumPad.generated.h"
+#include "NANumPad.generated.h"
 
-class UNANumpadWidget;
 
 DECLARE_DYNAMIC_DELEGATE(FOnCompleteGimic);
+class UNANumpadWidget;
 
 UCLASS(Abstract)
-class ARPG_API ANAPlaceableItem_NumPad : public ANAPlaceableItemActor
+class ARPG_API ANANumPad : public ANAPlaceableItemActor
 {
 	GENERATED_BODY()
 
 public:
 	// Sets default values for this actor's properties
-	ANAPlaceableItem_NumPad(const FObjectInitializer& ObjectInitializer);
+	ANANumPad(const FObjectInitializer& ObjectInitializer);
 
 	virtual void PostInitProperties() override;
 	virtual void PostRegisterAllComponents() override;

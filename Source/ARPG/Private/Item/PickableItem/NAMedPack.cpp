@@ -10,8 +10,6 @@
 #include "Item/ItemDataStructs/NARecoveryPackDataStructs.h"
 #include "NACharacter.h"
 #include "NAPlayerState.h"
-#include "Components/ArrowComponent.h"
-#include "Components/ShapeComponent.h"
 
 
 // Sets default values
@@ -22,12 +20,6 @@ ANAMedPack::ANAMedPack(const FObjectInitializer& ObjectInitializer)
 	PrimaryActorTick.bCanEverTick = true;
 
 	PickupMode = EPickupMode::PM_Inventory;
-
-	TestArrowComponent = CreateDefaultSubobject<UArrowComponent>(TEXT("TestArrow"));
-	if (ItemCollision)
-	{
-		TestArrowComponent->SetupAttachment(ItemCollision);
-	}
 }
 
 // Called when the game starts or when spawned

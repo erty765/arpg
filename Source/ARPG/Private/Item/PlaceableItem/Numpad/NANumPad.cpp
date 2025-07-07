@@ -1,40 +1,40 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "Item/PlaceableItem/Numpad/NAPlaceableItem_NumPad.h"
+#include "Item/PlaceableItem/Numpad/NANumPad.h"
 
 #include "Item/PlaceableItem/Numpad/NANumpadWidget.h"
 
 
 // Sets default values
-ANAPlaceableItem_NumPad::ANAPlaceableItem_NumPad(const FObjectInitializer& ObjectInitializer)
+ANANumPad::ANANumPad(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 }
 
-void ANAPlaceableItem_NumPad::PostInitProperties()
+void ANANumPad::PostInitProperties()
 {
 	Super::PostInitProperties();
 }
 
-void ANAPlaceableItem_NumPad::PostRegisterAllComponents()
+void ANANumPad::PostRegisterAllComponents()
 {
 	Super::PostRegisterAllComponents();
 }
 
-void ANAPlaceableItem_NumPad::OnConstruction(const FTransform& Transform)
+void ANANumPad::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 }
 
-void ANAPlaceableItem_NumPad::PostInitializeComponents()
+void ANANumPad::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
 }
 
-bool ANAPlaceableItem_NumPad::BeginInteract_Implementation(AActor* Interactor)
+bool ANANumPad::BeginInteract_Implementation(AActor* Interactor)
 {
 	if (Super::BeginInteract_Implementation(Interactor))
 	{
@@ -50,20 +50,20 @@ bool ANAPlaceableItem_NumPad::BeginInteract_Implementation(AActor* Interactor)
 	return false;
 }
 
-bool ANAPlaceableItem_NumPad::EndInteract_Implementation(AActor* Interactor)
+bool ANANumPad::EndInteract_Implementation(AActor* Interactor)
 {
 	return Super::EndInteract_Implementation(Interactor);
 
 	//UNAWorldEventHandler::GetInstance()->UnRegisterEvent(TEXT("Test"));
 }
 
-bool ANAPlaceableItem_NumPad::ExecuteInteract_Implementation(AActor* Interactor)
+bool ANANumPad::ExecuteInteract_Implementation(AActor* Interactor)
 {
 	return true;
 }
 
 // Called when the game starts or when spawned
-void ANAPlaceableItem_NumPad::BeginPlay()
+void ANANumPad::BeginPlay()
 {
 	Super::BeginPlay();
 	
@@ -76,7 +76,7 @@ void ANAPlaceableItem_NumPad::BeginPlay()
 	CachedWidget = Cast<UNANumpadWidget>(instance);
 }
 
-void ANAPlaceableItem_NumPad::ExecuteInteract_Wrapped()
+void ANANumPad::ExecuteInteract_Wrapped()
 {
 	if (TargetActor == nullptr) return;
 	
@@ -84,7 +84,7 @@ void ANAPlaceableItem_NumPad::ExecuteInteract_Wrapped()
 }
 
 // Called every frame
-void ANAPlaceableItem_NumPad::Tick(float DeltaTime)
+void ANANumPad::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 }

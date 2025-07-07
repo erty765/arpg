@@ -33,7 +33,8 @@ public:
 	virtual void PostLoad() override;
 	virtual void PostActorCreated() override;
 	virtual void OnConstruction(const FTransform& Transform) override;
-	virtual void UnregisterAllComponents(bool bForReregister = false) override;
+	virtual void PreRegisterAllComponents() override;
+	virtual void PostRegisterAllComponents() override;
 	virtual void Destroyed() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 

@@ -190,6 +190,6 @@ bool UNAItemData::GetInteractableData(FNAInteractableData& OutData) const
 
 bool UNAItemData::IsCurrencyItem() const
 {
-	return GetItemType() == EItemType::IT_UpgradeNode
+	return GetItemType() == EItemType::IT_PowerNode
 		|| GetItemType() == EItemType::IT_Credit;
 }

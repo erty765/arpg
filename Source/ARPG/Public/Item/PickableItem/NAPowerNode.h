@@ -4,16 +4,16 @@
 
 #include "CoreMinimal.h"
 #include "Item/ItemActor/NAPickableItemActor.h"
-#include "NAUpgradeNode.generated.h"
+#include "NAPowerNode.generated.h"
 
 UCLASS(Abstract)
-class ARPG_API ANAUpgradeNode : public ANAPickableItemActor
+class ARPG_API ANAPowerNode : public ANAPickableItemActor
 {
 	GENERATED_BODY()
 
 public:
 	// Sets default values for this actor's properties
-	ANAUpgradeNode(const FObjectInitializer& ObjectInitializer);
+	ANAPowerNode(const FObjectInitializer& ObjectInitializer);
 	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;

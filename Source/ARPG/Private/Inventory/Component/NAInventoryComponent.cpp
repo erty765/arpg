@@ -320,7 +320,7 @@ FNAItemAddResult UNAInventoryComponent::AddStackableItem(UNAItemData* InputItem,
 
 FNAItemAddResult UNAInventoryComponent::AddCurrencyItem(UNAItemData* InputItem)
 {
-	if (InputItem->GetItemType() == EItemType::IT_UpgradeNode)
+	if (InputItem->GetItemType() == EItemType::IT_PowerNode)
 	{
 		NodesCount += InputItem->GetQuantity();
 		return FNAItemAddResult::AddedAll(
@@ -544,7 +544,7 @@ int32 UNAInventoryComponent::TryAddItem(UNAItemData* ItemToAdd)
 	{
 		if (ItemToAdd->IsCurrencyItem())
 		{
-			if (ItemToAdd->GetItemType() == EItemType::IT_UpgradeNode)
+			if (ItemToAdd->GetItemType() == EItemType::IT_PowerNode)
 			{
 				RequestRedrawNodesQuantity();
 			}

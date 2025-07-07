@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "Item/PlaceableItem/Door/NAPlaceableItemActor_Door.h"
+#include "Item/PlaceableItem/Door/NADoor.h"
 #include "Algo/Find.h"
 #include "Components/SphereComponent.h"
 #include "Item/ItemWidget/NAItemWidgetComponent.h"
@@ -9,7 +9,7 @@
 
 
 // Sets default values
-ANAPlaceableItemActor_Door::ANAPlaceableItemActor_Door(const FObjectInitializer& ObjectInitializer)
+ANADoor::ANADoor(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
@@ -21,22 +21,22 @@ ANAPlaceableItemActor_Door::ANAPlaceableItemActor_Door(const FObjectInitializer&
 	TriggerSphere->SetRelativeLocation(FVector(0.f, 0.f, 0.f));
 }
 
-void ANAPlaceableItemActor_Door::PostRegisterAllComponents()
+void ANADoor::PostRegisterAllComponents()
 {
 	Super::PostRegisterAllComponents();
 }
 
-void ANAPlaceableItemActor_Door::OnConstruction(const FTransform& Transform)
+void ANADoor::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 }
 
-void ANAPlaceableItemActor_Door::PostInitializeComponents()
+void ANADoor::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
 }
 
-bool ANAPlaceableItemActor_Door::BeginInteract_Implementation(AActor* Interactor)
+bool ANADoor::BeginInteract_Implementation(AActor* Interactor)
 {
 	if (Super::BeginInteract_Implementation(Interactor))
 	{
@@ -48,7 +48,7 @@ bool ANAPlaceableItemActor_Door::BeginInteract_Implementation(AActor* Interactor
 	return false;
 }
 
-bool ANAPlaceableItemActor_Door::ExecuteInteract_Implementation(AActor* Interactor)
+bool ANADoor::ExecuteInteract_Implementation(AActor* Interactor)
 {
 	Super::ExecuteInteract_Implementation(Interactor);
 
@@ -56,7 +56,7 @@ bool ANAPlaceableItemActor_Door::ExecuteInteract_Implementation(AActor* Interact
 	return true;
 }
 
-bool ANAPlaceableItemActor_Door::EndInteract_Implementation(AActor* Interactor)
+bool ANADoor::EndInteract_Implementation(AActor* Interactor)
 {
 	if (Super::EndInteract_Implementation(Interactor))
 	{
@@ -68,7 +68,7 @@ bool ANAPlaceableItemActor_Door::EndInteract_Implementation(AActor* Interactor)
 }
 
 // Called when the game starts or when spawned
-void ANAPlaceableItemActor_Door::BeginPlay()
+void ANADoor::BeginPlay()
 {
 	Super::BeginPlay();
 
@@ -122,7 +122,7 @@ void ANAPlaceableItemActor_Door::BeginPlay()
 }
 
 // Called every frame
-void ANAPlaceableItemActor_Door::Tick(float DeltaTime)
+void ANADoor::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
@@ -133,12 +133,12 @@ void ANAPlaceableItemActor_Door::Tick(float DeltaTime)
 	// }
 }
 
-void ANAPlaceableItemActor_Door::InitInteraction(AActor* Interactor = nullptr)
+void ANADoor::InitInteraction(AActor* Interactor = nullptr)
 {
 	CurrentInteractingActor = Interactor;
 }
 
-void ANAPlaceableItemActor_Door::ActiveDoor()
+void ANADoor::ActiveDoor()
 {
 	//if (CurrentTime > Duration) return;
 	
@@ -159,7 +159,7 @@ void ANAPlaceableItemActor_Door::ActiveDoor()
 	Door2->SetWorldLocation(MovingPos2);
 }
 
-void ANAPlaceableItemActor_Door::ToggleDoor()
+void ANADoor::ToggleDoor()
 {
 	if (DoorType == EDoorType::Max)
 	{
@@ -233,18 +233,18 @@ void ANAPlaceableItemActor_Door::ToggleDoor()
 	}
 }
 
-void ANAPlaceableItemActor_Door::Server_ToggleDoor_Implementation()
+void ANADoor::Server_ToggleDoor_Implementation()
 {
 	ToggleDoor();
 	Multi_ToggleDoor();
 }
 
-void ANAPlaceableItemActor_Door::Multi_ToggleDoor_Implementation()
+void ANADoor::Multi_ToggleDoor_Implementation()
 {
 	ToggleDoor();
 }
 
-void ANAPlaceableItemActor_Door::OnDoorOpeningFinished()
+void ANADoor::OnDoorOpeningFinished()
 {
 	if (Door1->GetRelativeLocation().Equals(DestTF1_Local.GetLocation(), 0.1f) 
 		&& Door2->GetRelativeLocation().Equals(DestTF2_Local.GetLocation(), 0.1f))
@@ -259,7 +259,7 @@ void ANAPlaceableItemActor_Door::OnDoorOpeningFinished()
 	}
 }
 
-void ANAPlaceableItemActor_Door::OnDoorClosingFinished()
+void ANADoor::OnDoorClosingFinished()
 {
 	if (Door1->GetRelativeLocation().Equals(OriginTF1_Local.GetLocation(), 0.1f) 
 		&& Door2->GetRelativeLocation().Equals(OriginTF2_Local.GetLocation(), 0.1f))
@@ -274,7 +274,7 @@ void ANAPlaceableItemActor_Door::OnDoorClosingFinished()
 	}
 }
 
-void ANAPlaceableItemActor_Door::ReleaseItemWidgetComponent()
+void ANADoor::ReleaseItemWidgetComponent()
 {
 	if (!ItemWidgetComponent) return;
 	if (!bIsOpened)
@@ -288,7 +288,7 @@ void ANAPlaceableItemActor_Door::ReleaseItemWidgetComponent()
 	Super::ReleaseItemWidgetComponent();
 }
 
-void ANAPlaceableItemActor_Door::CollapseItemWidgetComponent()
+void ANADoor::CollapseItemWidgetComponent()
 {
 	// if (!ItemWidgetComponent) return;
 	// if (!bIsOpened)
