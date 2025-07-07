@@ -396,3 +396,76 @@ Pickup Mode 롤백: AutoUse-> 인벤x, 들기x, 상호작용 하자마자 자동
 - Weapon: ItemMesh에 붙은 컴포넌트들 계층 관계가 블프 에디터 UI에 안뜸
 - BlueprintCompile에서 바뀐거만 업데이트
 - 기존에 루트 컴포넌트가 부모가 아닌 애들에 대해서 다 붙였었는데 생성자에서 만든 콜리전과 매시가 있으니까 자식이 알아서 붙이도록 책임 위임
+
+[07/07]
+◎ 아이템 액터 풀링 추가 검토: 
+
+1. 아이템 생성/스폰 로직 검토 및 수정
+UNAItemEngineSubsystem::CreateItemDataByActor 함수:
+
+현재 이 함수는 ANAItemActor가 생성될 때 UNAItemData를 생성하고 연결하는 역할을 합니다. 풀링을 도입한다면, 이 함수는 아이템 액터의 '획득' 요청이 들어왔을 때, 새로운 액터를 스폰하는 대신 액터 풀에서 사용 가능한 액터를 가져오도록 수정되어야 합니다.
+
+검토 내용:
+
+풀에서 해당 클래스 타입의 액터를 찾아 반환하는 로직 추가.
+
+풀에 사용 가능한 액터가 없을 경우에만 GetWorld()->SpawnActor를 호출하여 새로운 액터를 생성하는 폴백(fallback) 로직 구현.
+
+풀에서 가져온 액터에 UNAItemData를 할당하는 ANAItemActor::AssignItemDataToChildActor와 유사한 OnPooledAcquired 함수를 호출하여 필요한 초기화가 이루어지도록 합니다.
+
+AMonsterSpawner::SpawnMonster 함수:
+
+몬스터가 아이템을 드랍할 때 GetWorld()->SpawnActor를 직접 호출하여 아이템 액터를 스폰합니다. 이 부분도 UNAItemEngineSubsystem의 풀링 로직을 사용하도록 수정해야 합니다.
+
+검토 내용: UNAItemEngineSubsystem을 통해 아이템 액터를 생성하도록 호출 방식을 변경합니다.
+
+2. 아이템 파괴/제거 로직 검토 및 수정
+UNAItemEngineSubsystem::DestroyRuntimeItemData 함수:
+
+현재 이 함수는 ItemActor->Destroy()를 호출하여 액터를 즉시 파괴합니다.
+
+검토 내용:
+
+액터를 Destroy()하는 대신, 해당 액터를 비활성화하고 (예: SetActorHiddenInGame(true), SetActorEnableCollision(false), SetActorTickEnabled(false)) 액터 풀로 반환하는 로직을 추가합니다.
+
+액터가 풀로 반환되기 전에 ANAItemActor에 추가될 OnPooledReleased 함수를 호출하여 모든 런타임 상태를 초기화하도록 합니다.
+
+ANAItemActor::Destroyed 함수 및 ANAItemWidgetPopupActor:
+
+아이템이 파괴될 때 ANAItemWidgetPopupActor를 스폰하여 위젯 팝업의 애니메이션을 처리합니다. 풀링 시에는 실제 액터 파괴가 일어나지 않으므로, 이 PopupActor의 생명주기와 ItemWidgetComponent의 관리가 변경되어야 합니다.
+
+검토 내용: ANAItemActor가 풀로 반환될 때 ItemWidgetComponent를 적절히 비활성화하거나, 팝업 애니메이션 처리 후 위젯만 RemoveFromParent하고 액터는 풀로 반환되도록 조정해야 합니다.
+
+ANAPickableItemActor::SetInteractionPhysicsEnabled 함수:
+
+이 함수는 아이템의 상호작용 가능 여부에 따라 물리 및 오버랩 이벤트를 활성화/비활성화합니다. 풀링된 액터가 재활용될 때 이러한 상태들이 올바르게 초기화되고 설정되는지 확인해야 합니다.
+
+검토 내용: OnPooledAcquired 및 OnPooledReleased 함수 내에서 이 함수를 호출하여 초기 상태를 설정하도록 통합하거나, 풀링 로직 자체가 이 함수가 적절히 호출되도록 보장해야 합니다.
+
+3. 아이템 상태 관리 및 초기화
+ANAItemActor 클래스:
+
+새로운 함수 추가:
+
+OnPooledAcquired(UNAItemData* InItemData): 풀에서 액터를 가져와 사용할 때 호출될 함수. 액터의 모든 컴포넌트(충돌, 메시, 위젯 등)를 활성화하고, InItemData를 연결하며, 필요한 초기 상태(예: 수량 랜덤화)를 설정합니다.
+
+OnPooledReleased(): 액터를 풀로 반환할 때 호출될 함수. 액터의 모든 컴포넌트를 비활성화하고, 물리 시뮬레이션을 끄고, ItemDataID를 NAME_None으로 초기화하는 등 모든 런타임 상태를 재설정합니다.
+
+UNAItemData 클래스:
+
+IDCount는 아이템 데이터의 고유 ID를 생성하는 데 사용되므로, 풀링된 액터가 새로운 UNAItemData와 연결될 때 이 ID 생성이 제대로 되는지 확인해야 합니다.
+
+검토 내용: UNAItemData 자체는 액터 풀링의 직접적인 영향을 받기보다는, 액터가 재활용될 때 어떤 UNAItemData와 연결될지에 대한 관리가 중요합니다.
+
+4. 네트워크 복제 (Replication) 검토
+ANAItemActor의 복제 설정:
+
+bReplicates = true로 설정되어 있으며, bWasChildActor와 같은 프로퍼티도 복제됩니다.
+
+검토 내용:
+
+액터가 풀에서 활성화/비활성화될 때 SetReplicates(true/false)를 사용하여 불필요한 네트워크 트래픽을 줄이는 것을 고려합니다.
+
+액터의 활성화/비활성화 상태와 ItemDataID 같은 핵심 데이터가 서버와 클라이언트 간에 정확히 동기화되도록 OnRep 함수들을 확인하거나 필요시 추가합니다.
+
+◎ GAS를 활용하여 상호작용 시스템 리팩토링하기
