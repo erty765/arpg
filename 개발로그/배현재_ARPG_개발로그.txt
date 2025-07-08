@@ -469,3 +469,42 @@ bReplicates = true로 설정되어 있으며, bWasChildActor와 같은 프로퍼
 액터의 활성화/비활성화 상태와 ItemDataID 같은 핵심 데이터가 서버와 클라이언트 간에 정확히 동기화되도록 OnRep 함수들을 확인하거나 필요시 추가합니다.
 
 ◎ GAS를 활용하여 상호작용 시스템 리팩토링하기
+
+
+[07/08]
+◎  AActor::PostSpawnInitialize
+	// General flow here is like so
+	// - Actor sets up the basics.
+	// - Actor gets PreInitializeComponents()
+	// - Actor constructs itself, after which its components should be fully assembled
+	// - Actor components get OnComponentCreated
+	// - Actor components get InitializeComponent
+	// - Actor gets PostInitializeComponents() once everything is set up
+	//
+	// This should be the same sequence for deferred or nondeferred spawning.
+└ PostSpawnInitialize에서 PostActorCreated호출. 즉 OnConstruction보다 먼저 호출됨. 
+└ PostActorCreated -> ActorCreated 델리게이트 ... -> OnConstruction ... -> BeginPlay
+
+◎ FinishSpawning에서 ExecuteConstruction 호출: 여기서 Blueprint Construction Script 호출 후 OnConstruction 호출 후 PostActorConstruction
+
+◎ ULevel::AddLoadedActors (#if WITH_EDITOR
+└ if (bAreComponentsCurrentlyRegistered)
+			{
+				Actor->RegisterAllComponents();
+			}
+
+◎ USCS_Node::ExecuteNodeOnActor
+
+◎ GIsReinstancing: True if actors and objects are being re-instanced.
+
+◎ AActor::ExecuteConstruction
+
+◎ AActor::bHasDeferredComponentRegistration: 컴포넌트 등록 지연을 결정하는 bool 변수(private).
+└ 블루프린트에서 생성된 인스턴스라면, SCS execution을 먼저 호출한 다음에 컴포넌트들을 register해야 함(FinsihSpawning)
+
+◎ PostSpawnInitialize: SpawnActor에서만 호출됨
+
+◎ 버그 1: 레벨에 배치한 아이템 액터(아이템 콜리전이 루트로 가는 인스턴스들): 피직스 시뮬레이트 안됨
+◎ 버그 2: 게스트 클라의 상호작용 시도가 안됨
+└ Interactable Focus에 추가하는건 잘 적용됨(서버/클라 캐릭터 나눠서 각 캐릭터의 Interaction 컴포넌트에 등록)
+└ 클라에서 상호작용 호출(ToggleInteraction)하면, NACharactor1(서버)의 ToggleInteraction이 호출됨.
