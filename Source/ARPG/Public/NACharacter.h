@@ -157,9 +157,6 @@ class ANACharacter : public ACharacter, public IAbilitySystemInterface, public I
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Replicated, Category = "Input", meta = (AllowPrivateAccess = "true"))
 	FVector_NetQuantizeNormal ReplicatedControlRotation;
-
-	UPROPERTY()
-	UMaterialInstanceConstant* InventoryWidgetMaterial;
 	
 public:
 	ANACharacter();

@@ -126,6 +126,22 @@ void ANAItemActor::PostLoad()
 	}
 }
 
+void ANAItemActor::PreRegisterAllComponents()
+{
+	Super::PreRegisterAllComponents();
+}
+
+void ANAItemActor::PostRegisterAllComponents()
+{
+	Super::PostRegisterAllComponents();
+	
+	if (bNeedItemCollision
+			&& GetWorld()->IsGameWorld())
+	{
+		ReplaceRootWithItemCollisionIfNeeded();
+	}
+}
+
 void ANAItemActor::PostActorCreated()
 {
 	Super::PostActorCreated();
@@ -251,11 +267,14 @@ void ANAItemActor::ReplaceRootWithItemCollisionIfNeeded()
 		}
 	}
 	
-	if (HasAuthority())
-	{
-		ItemCollision->SetWorldTransform(PreviousTransform);
-	}
+	ItemCollision->SetWorldTransform(PreviousTransform);
 }
+
+#if WITH_EDITOR || WITH_EDITORONLY_DATA
+void ANAItemActor::ReviseSubobjectsHierarchy()
+{
+}
+#endif
 
 void ANAItemActor::OnConstruction(const FTransform& Transform)
 {
@@ -431,21 +450,6 @@ void ANAItemActor::OnConstruction(const FTransform& Transform)
 	if (ItemMesh)
 	{
 		ItemMesh->SetRelativeTransform(MetaData->MeshTransform);
-	}
-}
-
-void ANAItemActor::PreRegisterAllComponents()
-{
-	Super::PreRegisterAllComponents();
-}
-
-void ANAItemActor::PostRegisterAllComponents()
-{
-	Super::PostRegisterAllComponents();
-
-	if (bNeedItemCollision)
-	{
-		ReplaceRootWithItemCollisionIfNeeded();
 	}
 }
 
@@ -695,7 +699,8 @@ void ANAItemActor::NotifyInteractableFocusBegin_Implementation(AActor* Interacta
 	{
 		if (const APawn* MaybePawn = Cast<APawn>(InteractorActor) )
 		{
-			if ( MaybePawn->IsLocallyControlled() )
+			if (MaybePawn->HasAuthority() && !MaybePawn->IsLocallyControlled() ) return;
+			
 			{
 				FString ItemName = InteractorActor ? GetNameSafe(InteractableActor) : TEXT_NULL;
 				FString InteractorName = InteractorActor ? GetNameSafe(InteractorActor) : TEXT_NULL;
@@ -718,7 +723,8 @@ void ANAItemActor::NotifyInteractableFocusEnd_Implementation(AActor* Interactabl
 	{
 		if (const APawn* MaybePawn = Cast<APawn>(InteractorActor) )
 		{
-			if ( MaybePawn->IsLocallyControlled() )
+			if (MaybePawn->HasAuthority() && !MaybePawn->IsLocallyControlled() ) return;
+			
 			{
 				FString ItemName = InteractorActor ? GetNameSafe(InteractableActor) : TEXT_NULL;
 				FString InteractorName = InteractorActor ? GetNameSafe(InteractorActor) : TEXT_NULL;

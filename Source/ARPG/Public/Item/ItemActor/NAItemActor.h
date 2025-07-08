@@ -31,10 +31,10 @@ public:
 	ANAItemActor(const FObjectInitializer& ObjectInitializer);
 	virtual void PostInitProperties() override;
 	virtual void PostLoad() override;
-	virtual void PostActorCreated() override;
-	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void PreRegisterAllComponents() override;
 	virtual void PostRegisterAllComponents() override;
+	virtual void PostActorCreated() override;
+	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void Destroyed() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -146,6 +146,9 @@ protected:
 	/** 기존 루트 컴포넌트를 제거하고, ItemCollision을 새로운 루트로 설정한 뒤, 기존 자식 컴포넌트들을 이관 */
 	virtual void ReplaceRootWithItemCollisionIfNeeded();
 	
+#if WITH_EDITOR || WITH_EDITORONLY_DATA
+	void ReviseSubobjectsHierarchy();
+#endif
 private:
 	void InitItemData();
 	void VerifyInteractableData();
