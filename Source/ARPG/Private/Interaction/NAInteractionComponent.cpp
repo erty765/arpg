@@ -128,12 +128,6 @@ void UNAInteractionComponent::MigrateInteractionData(FWeakInteractableHandle Sou
 	}
 }
 
-void UNAInteractionComponent::Client_AddItemToInventory_Implementation( ANAItemActor* ItemActor )
-{
-	// 서버에서는 성공했는데 클라이언트에서는 실패한 경우, 동기화가 뭔가 잘못됐을 가능성
-	check( TryAddItemToInventory( ItemActor ) );
-}
-
 void UNAInteractionComponent::UpdateInteractionData()
 {
 	if (!GetOwner()) { return;}
@@ -633,9 +627,5 @@ int32 UNAInteractionComponent::TryAddItemToInventory(ANAItemActor* ItemActor)
 		UE_LOG(LogTemp, Warning, TEXT("[TryAddItemToInventory]  (%s) 전부 추가 실패"), *ItemActor->GetName());
 	}
 	
-	if (!ItemActor->HasAuthority())
-	{
-		Client_AddItemToInventory(ItemActor);
-	}
 	return RemainQuantity;
 }

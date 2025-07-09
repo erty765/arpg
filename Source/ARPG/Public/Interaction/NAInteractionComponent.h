@@ -282,9 +282,6 @@ public:
 // 인벤토리 연계
 //======================================================================================================================
 
-	UFUNCTION( Client, Reliable )
-	void Client_AddItemToInventory(ANAItemActor* ItemActor);
-
 	/**
 	 * @param ItemActor 
 	 * @return	0: 전부 추가 성공

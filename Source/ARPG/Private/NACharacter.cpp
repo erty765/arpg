@@ -298,14 +298,6 @@ void ANACharacter::Server_RequestKineticGrabAbility_Implementation()
 	}
 }
 
-void ANACharacter::Server_BeginInteraction_Implementation()
-{
-	if (InteractionComponent)
-	{
-		InteractionComponent->ToggleInteraction();
-	}
-}
-
 void ANACharacter::Server_RequestReviveAbility_Implementation()
 {
 	// 부활 기능 추가
@@ -726,14 +718,8 @@ void ANACharacter::TryInteraction()
 	
 	if (ensure(InteractionComponent != nullptr))
 	{
-		if (!HasAuthority())
-		{
-			Server_BeginInteraction();
-		}
-		else
-		{
-			InteractionComponent->ToggleInteraction();
-		}
+		// 인벤토리 정보는 클라이언트에서 개별적으로 관리 
+		InteractionComponent->ToggleInteraction();
 	}
 }
 

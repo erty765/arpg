@@ -243,7 +243,6 @@ void ANAItemActor::ReplaceRootWithItemCollisionIfNeeded()
 	
 	TArray<USceneComponent*> PreviousChildren;
 	PreviousRootComponent->GetChildrenComponents(false, PreviousChildren);
-
 	for ( auto It = PreviousChildren.CreateConstIterator(); It; ++It )
 	{
 		if ( USceneComponent* Attachable = Cast<USceneComponent>( *It ))
@@ -251,7 +250,6 @@ void ANAItemActor::ReplaceRootWithItemCollisionIfNeeded()
 			Attachable->DetachFromComponent( FDetachmentTransformRules::KeepRelativeTransform );
 		}
 	}
-	
 	PreviousRootComponent->ClearFlags(RF_Standalone | RF_Public);
 	RemoveInstanceComponent(PreviousRootComponent);
 	PreviousRootComponent->DestroyComponent();
@@ -488,7 +486,6 @@ void ANAItemActor::GetLifetimeReplicatedProps( TArray<FLifetimeProperty>& OutLif
 void ANAItemActor::InitItemData()
 {
 	if (HasValidItemID()) return;
-	
 	if (const UNAItemData* NewItemData = UNAItemEngineSubsystem::Get()->CreateItemDataByActor(this))
 	{
 		ItemDataID = NewItemData->GetItemID();
