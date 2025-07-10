@@ -191,15 +191,16 @@ void UNAInventoryComponent::SortInvenSlotItems()
 
 TArray<UNAItemData*> UNAInventoryComponent::GetInventoryContents() const
 {
-	TArray<UNAItemData*> InventoryContentsArray;
-	for (const auto& Pair : InvenSlotContents)
-	{
-		if (Pair.Value.IsValid())
-		{
-			InventoryContentsArray.Add(Pair.Value.Get());
-		}
-	}
-	return InventoryContentsArray;
+	// TArray<UNAItemData*> InventoryContentsArray;
+	// for (const auto& Pair : InvenSlotContents)
+	// {
+	// 	if (Pair.Value.IsValid())
+	// 	{
+	// 		InventoryContentsArray.Add(Pair.Value.Get());
+	// 	}
+	// }
+	// return InventoryContentsArray;
+	return InventoryContents.Array();
 }
 
 FNAItemAddResult UNAInventoryComponent::AddNonStackableItem(UNAItemData* InputItem, const TArray<FName>& InEmptySlots)
@@ -477,14 +478,20 @@ int32 UNAInventoryComponent::TryAddItem(UNAItemData* ItemToAdd)
 {
 	if (!ItemToAdd)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[TryAddItem] ItemToAdd가 nullptr입니다."));
+		UE_LOG(NAInventory, Warning, TEXT("[TryAddItem] ItemToAdd가 nullptr입니다."));
 		return -1;
 	}
 	if (!ItemToAdd->IsPickableItem())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[TryAddItem] 인벤토리에 소지 불가능한 아이템입니다."));
+		UE_LOG(NAInventory, Warning, TEXT("[TryAddItem] 인벤토리에 소지 불가능한 아이템입니다."));
 		return -1;
 	}
+	if (InventoryContents.Contains(ItemToAdd))
+	{
+		UE_LOG(NAInventory, Warning, TEXT("[TryAddItem] 이미 소지 중인 아이템 데이터 인스턴스."));
+		return -1;
+	}
+	
 
 	const bool bIsStackable = ItemToAdd->IsStackableItem();
 	UClass* ItemClass = ItemToAdd->GetItemActorClass();
@@ -642,6 +649,7 @@ bool UNAInventoryComponent::HandleRemoveItem(const FName& SlotID)
 	{
 		UNAItemData* RemovedItem = InvenSubsys->RemoveItemFromInventory(ItemToRemove);
 		if (!RemovedItem || ItemToRemove != RemovedItem) { return ensure(false); }
+		InventoryContents.Remove(ItemToRemove);
 		RemovedItem->SetOwningInventory(nullptr);
 		
 		// 인벤토리에서 수량이 0으로 변경된 아이템 데이터를 제거
@@ -1228,6 +1236,7 @@ bool UNAInventoryComponent::HandleAddNewItem(UNAItemData* NewItemToAdd, const FN
 	{
 		InvenSlotContents[SlotID] = NewItemToAdd;
 	}
+	InventoryContents.Add(NewItemToAdd);
 	NewItemToAdd->SetOwningInventory(this);
 	InvenSubsys->AddItemToInventory(this, SlotID, NewItemToAdd);
 	return true;

@@ -34,6 +34,7 @@ public:
 	virtual void PreRegisterAllComponents() override;
 	virtual void PostRegisterAllComponents() override;
 	virtual void PostActorCreated() override;
+	virtual void PostNetReceive() override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void Destroyed() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -126,8 +127,7 @@ public:
 
 	virtual void ReleaseItemWidgetComponent();
 	virtual void CollapseItemWidgetComponent();
-
-	void FinalizeAndDestroyAfterInventoryAdded(AActor* Interactor);
+	
 protected:
 	virtual EItemSubobjDirtyFlags GetDirtySubobjectFlags(const FNAItemBaseTableRow* MetaData) const;
 	
@@ -146,13 +146,18 @@ protected:
 	/** 기존 루트 컴포넌트를 제거하고, ItemCollision을 새로운 루트로 설정한 뒤, 기존 자식 컴포넌트들을 이관 */
 	virtual void ReplaceRootWithItemCollisionIfNeeded();
 	
+	virtual void SetItemSubobjectsPhysics(const bool bEnable);
+	
 #if WITH_EDITOR || WITH_EDITORONLY_DATA
 	void ReviseSubobjectsHierarchy();
 #endif
 private:
 	void InitItemData();
 	void VerifyInteractableData();
-	virtual void InitCheckIfChildActor();
+	void InitCheckIfChildActor();
+	
+	void InitItemSubobjectsAttachment();
+	void InitItemSubobjectsCollision();
 
 protected:
 	friend struct FNAItemBaseTableRow;

@@ -10,32 +10,35 @@
 #include "Item/ItemWidget/NAItemWidgetComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Item/ItemWidget/NAItemWidget.h"
+#include "Misc/NALogCategory.h"
 
 
 ANAItemActor::ANAItemActor(const FObjectInitializer& ObjectInitializer)
 	:Super(ObjectInitializer)
 {
-	if (HasAnyFlags(RF_ClassDefaultObject))
 	{
-		if (!GetClass()->HasAllClassFlags(CLASS_CompiledFromBlueprint))
-		{
-			UE_LOG(LogTemp, Display, TEXT("[ANAItemActor]  C++ CDO 생성자 (%s)"), *GetName());
-		}
-		else
-		{
-			UE_LOG(LogTemp, Display, TEXT("[ANAItemActor]  BP CDO 생성자 (%s)"), *GetName());
-		}
-	}
-	else
-	{
-		if (!GetClass()->HasAllClassFlags(CLASS_CompiledFromBlueprint))
-		{
-			UE_LOG(LogTemp, Display, TEXT("[ANAItemActor]  C++ 인스턴스 생성자 (%s)"), *GetName());
-		}
-		else
-		{
-			UE_LOG(LogTemp, Display, TEXT("[ANAItemActor]  BP 인스턴스 생성자 (%s)"), *GetName());
-		}
+		// if (HasAnyFlags(RF_ClassDefaultObject))
+		// {
+		// 	if (!GetClass()->HasAllClassFlags(CLASS_CompiledFromBlueprint))
+		// 	{
+		// 		UE_LOG(NAItem, Log, TEXT("[ANAItemActor] C++ CDO (%s)"), *GetNameSafe(this));
+		// 	}
+		// 	else
+		// 	{
+		// 		UE_LOG(NAItem, Log, TEXT("[ANAItemActor] BP CDO (%s)"), *GetNameSafe(this));
+		// 	}
+		// }
+		// else
+		// {
+		// 	if (!GetClass()->HasAllClassFlags(CLASS_CompiledFromBlueprint))
+		// 	{
+		// 		UE_LOG(NAItem, Log, TEXT("[ANAItemActor] C++ 인스턴스 (%s)"), *GetNameSafe(this));
+		// 	}
+		// 	else
+		// 	{
+		// 		UE_LOG(NAItem, Log, TEXT("[ANAItemActor] BP 인스턴스 (%s)"), *GetNameSafe(this));
+		// 	}
+		// }
 	}
 
 	StubRootComponent = CreateDefaultSubobject<USceneComponent>( "StubRootComponent", true );
@@ -82,23 +85,9 @@ ANAItemActor::ANAItemActor(const FObjectInitializer& ObjectInitializer)
 
 	ItemWidgetComponent
 		= CreateOptionalDefaultSubobject<UNAItemWidgetComponent>(TEXT("ItemWidgetComponent"));
-
-	if (ItemCollision)
-	{
-		ItemCollision->SetupAttachment(GetRootComponent());
-	}
-	if (ItemMesh)
-	{
-		ItemMesh->SetupAttachment(GetRootComponent());
-	}
-	if (TriggerSphere)
-	{
-		TriggerSphere->SetupAttachment(GetRootComponent());
-	}
-	if (ItemWidgetComponent)
-	{
-		ItemWidgetComponent->SetupAttachment(GetRootComponent());
-	}
+	
+	InitItemSubobjectsAttachment();
+	InitItemSubobjectsCollision();
 	
 	ItemDataID = NAME_None;
 	AActor::SetReplicateMovement( true );
@@ -121,7 +110,6 @@ void ANAItemActor::PostLoad()
 			&& !IsChildActor())
 		{
 			InitItemData();
-			InitCheckIfChildActor();
 		}
 	}
 }
@@ -145,6 +133,11 @@ void ANAItemActor::PostRegisterAllComponents()
 void ANAItemActor::PostActorCreated()
 {
 	Super::PostActorCreated();
+}
+
+void ANAItemActor::PostNetReceive()
+{
+	Super::PostNetReceive();
 }
 
 EItemSubobjDirtyFlags ANAItemActor::GetDirtySubobjectFlags(
@@ -266,6 +259,69 @@ void ANAItemActor::ReplaceRootWithItemCollisionIfNeeded()
 	}
 	
 	ItemCollision->SetWorldTransform(PreviousTransform);
+}
+
+void ANAItemActor::InitItemSubobjectsAttachment()
+{
+	if (!ensureAlways(GetRootComponent() != nullptr))
+	{
+		return;
+	}
+	
+	if (ItemCollision)
+	{
+		ItemCollision->SetupAttachment(GetRootComponent());
+	}
+	if (ItemMesh)
+	{
+		ItemMesh->SetupAttachment(GetRootComponent());
+	}
+	if (TriggerSphere)
+	{
+		TriggerSphere->SetupAttachment(GetRootComponent());
+	}
+	if (ItemWidgetComponent)
+	{
+		ItemWidgetComponent->SetupAttachment(GetRootComponent());
+	}
+}
+
+void ANAItemActor::InitItemSubobjectsCollision()
+{
+	if (ItemCollision)
+	{
+		ItemCollision->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+		ItemCollision->SetSimulatePhysics(false);
+		ItemCollision->bReplicatePhysicsToAutonomousProxy = false;
+		ItemCollision->SetGenerateOverlapEvents(true);
+	}
+	if (ItemMesh)
+	{
+		if (bNeedItemCollision)
+		{
+			ItemMesh->SetCollisionProfileName(TEXT("NoCollision"));
+		}
+		else
+		{
+			ItemMesh->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+		}
+		ItemMesh->SetSimulatePhysics(false);
+		ItemMesh->bReplicatePhysicsToAutonomousProxy = false;
+		ItemMesh->SetGenerateOverlapEvents(false);
+	}
+}
+
+void ANAItemActor::SetItemSubobjectsPhysics(const bool bEnable)
+{
+	if (ItemCollision)
+	{
+		SetReplicateMovement( bEnable );
+		SetReplicates( bEnable );
+		
+		ItemCollision->SetIsReplicated( bEnable );
+		ItemCollision->SetSimulatePhysics( bEnable );
+		ItemCollision->SetCollisionEnabled( bEnable ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision );
+	}
 }
 
 #if WITH_EDITOR || WITH_EDITORONLY_DATA
@@ -524,12 +580,6 @@ void ANAItemActor::CollapseItemWidgetComponent()
 	}
 }
 
-void ANAItemActor::FinalizeAndDestroyAfterInventoryAdded(AActor* Interactor)
-{
-	FinalizeAndDestroyAfterInventoryAdded_Impl(Interactor);
-	Destroy();
-}
-
 void ANAItemActor::InitCheckIfChildActor()
 {
 	if ( HasAuthority() )
@@ -545,60 +595,79 @@ void ANAItemActor::InitCheckIfChildActor()
 		if (ItemCollision)
 		{
 			ItemCollision->SetSimulatePhysics(false);
+			ItemCollision->bReplicatePhysicsToAutonomousProxy = false;
 			ItemCollision->SetGenerateOverlapEvents( false );
-			ItemCollision->SetCollisionResponseToAllChannels( ECR_Ignore );
+			ItemCollision->SetCollisionProfileName(TEXT("NoCollision"));
 			ItemCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+		if (ItemMesh)
+		{
+			ItemMesh->SetSimulatePhysics(false);
+			ItemMesh->bReplicatePhysicsToAutonomousProxy = false;
+			ItemMesh->SetGenerateOverlapEvents(false);
+			ItemMesh->SetCollisionProfileName(TEXT("NoCollision"));
+			ItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		}
 		if (TriggerSphere)
 		{
 			TriggerSphere->Deactivate();
 			TriggerSphere->SetSimulatePhysics(false);
+			TriggerSphere->bReplicatePhysicsToAutonomousProxy = false;
 			TriggerSphere->SetGenerateOverlapEvents(false);
+			TriggerSphere->SetCollisionProfileName(TEXT("NoCollision"));
 			TriggerSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		}
 		if (ItemWidgetComponent)
 		{
 			CollapseItemWidgetComponent();
 		}
-		if (ItemMesh)
-		{
-			ItemMesh->SetCollisionEnabled( ECollisionEnabled::NoCollision );
-			ItemMesh->SetSimulatePhysics( false );
-			ItemMesh->SetGenerateOverlapEvents(false);
-		}
 	}
 	else
 	{
-		// 콜리전, 피직스 등등 설정 여기에
-		if (ItemCollision)
-		{
-			ItemCollision->SetCollisionProfileName(TEXT("BlockAllDynamic"));
-			if ( HasAuthority() )
-			{
-				// 서버에서만 물리 시뮬레이션을 수행
-				ItemCollision->SetSimulatePhysics( true );	
-				ItemCollision->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-			}
-			else
-			{
-				ItemCollision->SetSimulatePhysics( false );
-				ItemCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-				ItemCollision->SetCollisionResponseToAllChannels( ECR_Ignore );
-			}
-			ItemCollision->SetGenerateOverlapEvents( true );
-			ItemCollision->SetIsReplicated( true );
-		}
-		if (ItemMesh)
-		{
-			ItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-			ItemMesh->SetSimulatePhysics(false);
-			ItemMesh->SetGenerateOverlapEvents(false);
-		}
+		// // 콜리전, 피직스 등등 설정 여기에
+		// if (ItemCollision)
+		// {
+		// 	ItemCollision->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+		// 	if ( HasAuthority() )
+		// 	{
+		// 		// 서버에서만 물리 시뮬레이션을 수행
+		// 		ItemCollision->SetSimulatePhysics( true );
+		// 		ItemCollision->bReplicatePhysicsToAutonomousProxy = true;
+		// 		ItemCollision->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		// 	}
+		// 	else
+		// 	{
+		// 		ItemCollision->SetSimulatePhysics( false );
+		// 		ItemCollision->bReplicatePhysicsToAutonomousProxy = false;
+		// 		ItemCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		// 		ItemCollision->SetCollisionResponseToAllChannels( ECR_Ignore );
+		// 	}
+		// 	ItemCollision->SetGenerateOverlapEvents( true );
+		// 	ItemCollision->SetIsReplicated( true );
+		// }
+		// if (ItemMesh)
+		// {
+		// 	if (bNeedItemCollision)
+		// 	{
+		// 		ItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		// 		ItemMesh->SetSimulatePhysics(false);
+		// 		ItemMesh->bReplicatePhysicsToAutonomousProxy = false;
+		// 		ItemMesh->SetGenerateOverlapEvents(false);
+		// 	}
+		// 	else
+		// 	{
+		// 		ItemMesh->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+		// 		ItemMesh->SetSimulatePhysics(false);
+		// 		ItemMesh->bReplicatePhysicsToAutonomousProxy = false;
+		// 		ItemMesh->SetGenerateOverlapEvents(false);
+		// 	}
+		// }
+		SetItemSubobjectsPhysics(true);
 	}
 }
 
 void ANAItemActor::OnActorBeginOverlap_Impl(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+                                            UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	Execute_NotifyInteractableFocusBegin(this, OverlappedComponent->GetOwner(), OtherActor);
 }
@@ -613,6 +682,42 @@ void ANAItemActor::BeginPlay()
 {
 	Super::BeginPlay();
 
+	if (HasAuthority())
+	{
+		// 서버에서 Owner가 없었다면 클라이언트 플레이어에게 소유권 할당
+		if (!GetOwner())
+		{
+			if (APawn* InstigatingPawn = GetInstigator())
+			{
+				if (AController* InstigatingController = InstigatingPawn->GetController())
+				{
+					SetOwner(InstigatingController);
+					UE_LOG(NAItem, Log, TEXT("[Server] %s: Set owner to Controller %s")
+						, *GetName(), *InstigatingController->GetName());
+				}else
+				{
+					UE_LOG(NAItem, Warning, TEXT("[Server] %s: Could not find controller from instigator %s"), *GetName(), *InstigatingPawn->GetName());
+				}
+			}
+			else
+			{
+				UE_LOG(NAItem, Warning, TEXT("[Server] %s: No instigator found to determine owner."), *GetName());
+			}
+		}
+	}
+	else
+	{
+		// 클라이언트: Owner 정보 로그 출력 (RPC가 가능한 상태인지 확인용)
+		if (AActor* MyOwner = GetOwner())
+		{
+			UE_LOG(NAItem, Log, TEXT("[Client] %s: Owner is %s"), *GetName(), *MyOwner->GetName());
+		}
+		else
+		{
+			UE_LOG(NAItem, Warning, TEXT("[Client] %s: No owner assigned! RPCs will fail."), *GetName());
+		}
+	}
+	
 	InitCheckIfChildActor();
 	
 	if (InteractableInterfaceRef && TriggerSphere)
@@ -696,15 +801,14 @@ void ANAItemActor::NotifyInteractableFocusBegin_Implementation(AActor* Interacta
 	{
 		if (const APawn* MaybePawn = Cast<APawn>(InteractorActor) )
 		{
-			if (MaybePawn->HasAuthority() && !MaybePawn->IsLocallyControlled() ) return;
-			
+			FString ItemName = InteractorActor ? GetNameSafe(InteractableActor) : TEXT_NULL;
+			FString InteractorName = InteractorActor ? GetNameSafe(InteractorActor) : TEXT_NULL;
+			UE_LOG(NAInteraction, Log, TEXT("[NotifyInteractableFocusBegin] 포커스 On. 아이템: %s, 행위자: %s")
+				   , *ItemName, *InteractorName);
+			bIsFocused = InteractionComp->OnInteractableFound(this);
+
+			if ( MaybePawn->IsLocallyControlled() )
 			{
-				FString ItemName = InteractorActor ? GetNameSafe(InteractableActor) : TEXT_NULL;
-				FString InteractorName = InteractorActor ? GetNameSafe(InteractorActor) : TEXT_NULL;
-				UE_LOG(LogTemp, Warning, TEXT("[NotifyInteractableFocusBegin]  포커스 On 알림 - 아이템: %s, 행위자: %s")
-					, *ItemName, *InteractorName);
-		
-				bIsFocused = InteractionComp->OnInteractableFound(this);
 				if (bIsFocused && IsValid(ItemWidgetComponent))
 				{
 					ReleaseItemWidgetComponent();
@@ -720,15 +824,14 @@ void ANAItemActor::NotifyInteractableFocusEnd_Implementation(AActor* Interactabl
 	{
 		if (const APawn* MaybePawn = Cast<APawn>(InteractorActor) )
 		{
-			if (MaybePawn->HasAuthority() && !MaybePawn->IsLocallyControlled() ) return;
-			
-			{
-				FString ItemName = InteractorActor ? GetNameSafe(InteractableActor) : TEXT_NULL;
-				FString InteractorName = InteractorActor ? GetNameSafe(InteractorActor) : TEXT_NULL;
-				UE_LOG(LogTemp, Warning, TEXT("[NotifyInteractableFocusEnd]  포커스 Off 알림 - 아이템: %s, 행위자: %s")
-					, *ItemName, *InteractorName);
+			FString ItemName = InteractorActor ? GetNameSafe(InteractableActor) : TEXT_NULL;
+			FString InteractorName = InteractorActor ? GetNameSafe(InteractorActor) : TEXT_NULL;
+			UE_LOG(NAInteraction, Log, TEXT("[NotifyInteractableFocusEnd] 포커스 Off. 아이템: %s, 행위자: %s")
+				   , *ItemName, *InteractorName);
+			bIsFocused = !InteractionComp->OnInteractableLost(this);
 
-				bIsFocused = !InteractionComp->OnInteractableLost(this);
+			if ( MaybePawn->IsLocallyControlled() )
+			{
 				if (!bIsFocused && IsValid(ItemWidgetComponent))
 				{
 					CollapseItemWidgetComponent();
@@ -754,7 +857,7 @@ bool ANAItemActor::TryInteract_Implementation(AActor* Interactor)
 					SetInteractableCount(GetInteractableCount() - 1);
 				}
 				
-				UE_LOG(LogTemp, Warning, TEXT("[TryInteract]  상호작용 사이클 완료"));
+				UE_LOG(NAInteraction, Log, TEXT("[TryInteract] 상호작용 완료"));
 				SetInteractionPhysicsEnabled(true);
 				bIsOnInteract = false;
 				return true;
@@ -762,7 +865,7 @@ bool ANAItemActor::TryInteract_Implementation(AActor* Interactor)
 		}
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("[TryInteract]  상호작용 사이클 중단"));
+	UE_LOG(NAInteraction, Log, TEXT("[TryInteract] 상호작용 중단"));
 	SetInteractionPhysicsEnabled(true);
 	bIsOnInteract = false;
 	return false;
@@ -773,7 +876,7 @@ bool ANAItemActor::BeginInteract_Implementation(AActor* InteractorActor)
 	if (!Execute_CanInteract(this)) { return false; }
 	if (!CanPerformInteractionWith(InteractorActor))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[BeginInteract]  상호작용 조건 불충분"));
+		UE_LOG(NAInteraction, Warning, TEXT("[BeginInteract] 상호작용 조건 불충분"));
 		return false;
 	}
 	return bIsOnInteract;
@@ -781,7 +884,7 @@ bool ANAItemActor::BeginInteract_Implementation(AActor* InteractorActor)
 
 bool ANAItemActor::ExecuteInteract_Implementation(AActor* InteractorActor)
 {
-	ensureAlwaysMsgf(bIsOnInteract, TEXT("[ExecuteInteract_Implementation]  bIsOnInteract이 false였음"));
+	ensureAlwaysMsgf(bIsOnInteract, TEXT("[ExecuteInteract] bIsOnInteract이 false였음"));
 	return bIsOnInteract;
 }
 

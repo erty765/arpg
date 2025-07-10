@@ -126,6 +126,8 @@ private:
 			//InventoryComponent->InventoryContents.Add(FName(*SlotNameStr), nullptr);
 			InventoryComponent->WeaponSlotContents.Add(MakeWeaponSlotID(i), nullptr);
 		}
+
+		InventoryComponent->InventoryContents.Reserve(MaxTotalSlots);
 	}
 	
 protected:
@@ -306,6 +308,10 @@ protected:
 	// SlotID, ItemData
 	UPROPERTY(VisibleAnywhere, Category = "Inventory Component")
 	TMap<FName, TWeakObjectPtr<UNAItemData>> WeaponSlotContents;
+
+	// Weapon, Inven 슬롯 모두 합산
+	UPROPERTY(VisibleAnywhere, Category = "Inventory Component")
+	TSet<UNAItemData*> InventoryContents;
 
 	// @TODO: 장착 중인 수트의 레벨에 따라 인벤토리의 총 용량이 달라지도록
 

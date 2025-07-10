@@ -39,6 +39,11 @@ void UNAInteractionComponent::BeginPlay()
 	// ...
 }
 
+void UNAInteractionComponent::Server_ToggleInteraction_Implementation()
+{
+	ToggleInteraction();
+}
+
 // Called every frame
 void UNAInteractionComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
@@ -300,6 +305,11 @@ bool UNAInteractionComponent::OnInteractableLost(TScriptInterface<INAInteractabl
 
 void UNAInteractionComponent::ToggleInteraction()
 {
+	if ( !GetOwner()->HasAuthority() )
+	{
+		Server_ToggleInteraction();
+	}
+	
 	if (!NearestInteractable.IsValid()
 		|| !FocusedInteractables.Contains(NearestInteractable))
 	{
@@ -451,79 +461,83 @@ FNAInteractionResult UNAInteractionComponent::StratInteraction(FWeakInteractable
 					FText::FromString(TEXT(
 						"")));
 			}
-			
-			const TScriptInterface<INAHandActor> HandActor = GetOwner();
-			ensureAlways(HandActor != nullptr);
 
-			UChildActorComponent* RightHandChildActorComp = HandActor->GetRightHandChildActorComponent();
-			UChildActorComponent* LeftHandChildActorComp = HandActor->GetLeftHandChildActorComponent();
-			ensureAlways(RightHandChildActorComp && LeftHandChildActorComp);
-
-			ANAItemActor* AttachedItemActor_Right = Cast<ANAItemActor>(RightHandChildActorComp->GetChildActor());
-			ANAItemActor* AttachedItemActor_Left = Cast<ANAItemActor>(LeftHandChildActorComp->GetChildActor());
-			
-			if (!HasPendingInteractable())
+			if ( GetOwner()->HasAuthority() )
 			{
-				ensureAlways(!AttachedItemActor_Right && !AttachedItemActor_Left);
+				const TScriptInterface<INAHandActor> HandActor = GetOwner();
+				ensureAlways(HandActor != nullptr);
 
-				// A. 양 손이 비어 있다면, 어태치 시도
-				TScriptInterface<INAInteractableInterface> NewInteractableActor =
-					TryAttachItemMeshToOwner(TargetInteractable.ToScriptInterface());
-				if (NewInteractableActor != nullptr)
-				{
-					// 어태치 성공하면, ChildActorComponent에 의해 새롭게 생성된 아이템 액터를 사용 대기 아이템으로 등록
-					ensureAlways(ActiveInteractable.IsValid() && ActiveInteractable == NewInteractableActor);
-					bHasPendingInteractable = true;
-					NewInteractableActor->SetAttachedAndPendingUse(bHasPendingInteractable);
-					return FNAInteractionResult::InteractionPended(FText::FromString(TEXT(
-						"")));
-				}
-				else
-				{
-					// 어태치 실패
-					return FNAInteractionResult::InteractionFailed(ENAInteractionFailureReason::IxFR_Unknown,
-						FText::FromString(TEXT(
-							"")));
-				}
-			}
+				UChildActorComponent* RightHandChildActorComp = HandActor->GetRightHandChildActorComponent();
+				UChildActorComponent* LeftHandChildActorComp = HandActor->GetLeftHandChildActorComponent();
+				ensureAlways(RightHandChildActorComp && LeftHandChildActorComp);
+
+				ANAItemActor* AttachedItemActor_Right = Cast<ANAItemActor>(RightHandChildActorComp->GetChildActor());
+				ANAItemActor* AttachedItemActor_Left = Cast<ANAItemActor>(LeftHandChildActorComp->GetChildActor());
 			
-			ensureAlways(ActiveInteractable == TargetInteractable);
-			// B. 양 손이 비어 있지 않고, 어태치된 액터가 무기가 아니라면 -> 상호작용 가능 하면 begin interact
-			if (TargetInteractable.ToScriptInterface()->CanPerformInteractionWith(GetOwner()))
-			{
-				if (PickableInteractable->Execute_TryInteract(PickableInteractable, GetOwner()))
+				if (!HasPendingInteractable())
 				{
-					// 상호작용 사이클 성공
-					if (!PickableInteractable->IsUnlimitedInteractable()
-						&& PickableInteractable->GetInteractableCount() <= 0)
+					ensureAlways(!AttachedItemActor_Right && !AttachedItemActor_Left);
+
+					// A. 양 손이 비어 있다면, 어태치 시도
+					TScriptInterface<INAInteractableInterface> NewInteractableActor =
+						TryAttachItemMeshToOwner(TargetInteractable.ToScriptInterface());
+					if (NewInteractableActor != nullptr)
 					{
-						// 상호작용 가능 횟수 == 0: 디태치 & 아이템 액터 파괴
-						bool bDetached = false;
-						if (AttachedItemActor_Right)
-						{
-							RightHandChildActorComp->DestroyChildActor();
-							RightHandChildActorComp->SetChildActorClass(nullptr);
-							bDetached = true;
-						}
-						else if (AttachedItemActor_Left)
-						{
-							LeftHandChildActorComp->DestroyChildActor();
-							LeftHandChildActorComp->SetChildActorClass(nullptr);
-							bDetached = true;
-						}
-
-						if (bDetached)
-						{
-							bHasPendingInteractable = false;
-							OnInteractableLost(TargetInteractable.ToScriptInterface());
-							return FNAInteractionResult::InteractionSucceeded(FText::FromString(TEXT(
-								"상호작용 성공 후 상호작용 횟수 전부 소진됨. 아이템 액터 디태치 및 파괴")));
-						}
+						// 어태치 성공하면, ChildActorComponent에 의해 새롭게 생성된 아이템 액터를 사용 대기 아이템으로 등록
+						ensureAlways(ActiveInteractable.IsValid() && ActiveInteractable == NewInteractableActor);
+						bHasPendingInteractable = true;
+						NewInteractableActor->SetAttachedAndPendingUse(bHasPendingInteractable);
+						return FNAInteractionResult::InteractionPended(FText::FromString(TEXT(
+							"")));
 					}
 					else
 					{
-						return FNAInteractionResult::InteractionPended(FText::FromString(TEXT(
-							"상호작용 성공")));
+						// 어태치 실패
+						return FNAInteractionResult::InteractionFailed(ENAInteractionFailureReason::IxFR_Unknown,
+							FText::FromString(TEXT(
+								"")));
+					}
+				}
+
+				ensureAlways(ActiveInteractable == TargetInteractable);
+				// B. 양 손이 비어 있지 않고, 어태치된 액터가 무기가 아니라면 -> 상호작용 가능 하면 begin interact
+				if (TargetInteractable.ToScriptInterface()->CanPerformInteractionWith(GetOwner()))
+				{
+					if (PickableInteractable->Execute_TryInteract(PickableInteractable, GetOwner()))
+					{
+						// 상호작용 사이클 성공
+						if (!PickableInteractable->IsUnlimitedInteractable()
+							&& PickableInteractable->GetInteractableCount() <= 0)
+						{
+							// 상호작용 가능 횟수 == 0: 디태치 & 아이템 액터 파괴
+							bool bDetached = false;
+							if (AttachedItemActor_Right)
+							{
+								RightHandChildActorComp->DestroyChildActor();
+								RightHandChildActorComp->SetChildActorClass(nullptr);
+								bDetached = true;
+							}
+							else if (AttachedItemActor_Left)
+							{
+								LeftHandChildActorComp->DestroyChildActor();
+								LeftHandChildActorComp->SetChildActorClass(nullptr);
+								bDetached = true;
+							}
+
+							if (bDetached)
+							{
+								bHasPendingInteractable = false;
+								// todo: 클라이언트에 전파
+								OnInteractableLost(TargetInteractable.ToScriptInterface());
+								return FNAInteractionResult::InteractionSucceeded(FText::FromString(TEXT(
+									"상호작용 성공 후 상호작용 횟수 전부 소진됨. 아이템 액터 디태치 및 파괴")));
+							}
+						}
+						else
+						{
+							return FNAInteractionResult::InteractionPended(FText::FromString(TEXT(
+								"상호작용 성공")));
+						}
 					}
 				}
 			}
@@ -535,19 +549,22 @@ FNAInteractionResult UNAInteractionComponent::StratInteraction(FWeakInteractable
 	else if (ANAPlaceableItemActor* PlaceableInteractable =
 		Cast<ANAPlaceableItemActor>(TargetInteractableData.InteractableItemActor.Get()))
 	{
-		// 바로 begin interact
-		if (TargetInteractable.ToScriptInterface()->CanPerformInteractionWith(GetOwner()))
+		if ( GetOwner()->HasAuthority() )
 		{
-			SetActiveInteractable(TargetInteractable.ToScriptInterface());
-			if (PlaceableInteractable->Execute_TryInteract(PlaceableInteractable, GetOwner()))
+			// 바로 begin interact
+			if (TargetInteractable.ToScriptInterface()->CanPerformInteractionWith(GetOwner()))
 			{
-				return FNAInteractionResult::InteractionSucceeded(
-					FText::FromString(TEXT("상호작용 성공")));
+				SetActiveInteractable(TargetInteractable.ToScriptInterface());
+				if (PlaceableInteractable->Execute_TryInteract(PlaceableInteractable, GetOwner()))
+				{
+					return FNAInteractionResult::InteractionSucceeded(
+						FText::FromString(TEXT("상호작용 성공")));
+				}
 			}
-		}
-		
-		return FNAInteractionResult::InteractionFailed(ENAInteractionFailureReason::IxFR_RequirementNotMet,
+
+			return FNAInteractionResult::InteractionFailed(ENAInteractionFailureReason::IxFR_RequirementNotMet,
 				FText::FromString(TEXT("조건 불충분")));
+		}
 	}
 
 	return FNAInteractionResult::InteractionFailed(ENAInteractionFailureReason::IxFR_InvalidTarget,
@@ -611,20 +628,25 @@ int32 UNAInteractionComponent::TryAddItemToInventory(ANAItemActor* ItemActor)
 	int32 RemainQuantity =  InventoryComp->TryAddItem(Item);
 	if (RemainQuantity == 0) // 전부 추가 성공: 아이템 액터 파괴
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[TryAddItemToInventory]  (%s) 전부 추가 성공"), *ItemActor->GetName());
-		ItemActor->FinalizeAndDestroyAfterInventoryAdded(GetOwner());
+		UE_LOG(LogTemp, Warning, TEXT("[%hs] %s 전부 추가 성공. 행위자: %s")
+			, __FUNCTION__, *ItemActor->GetName(), *GetOwner()->GetName());
+		
+		if ( ItemActor->HasAuthority() )
+		{
+			ItemActor->Destroy();
+		}
 	}
 	else if (RemainQuantity > 0) // 부분 추가
 	{
 		// 아이템 액터 자체는 잔존하나, 아이템 데이터가 복제됨
 		// 해당 아이템 액터에 남아있는 아이템 데이터 / 인벤토리에 적재된 아이템 데이터
-		UE_LOG(LogTemp, Warning, TEXT("[TryAddItemToInventory]  (%s) 부분 추가: 남은 수량 (%d)"),
-			*ItemActor->GetName(), RemainQuantity);
+		UE_LOG(LogTemp, Warning, TEXT("[%hs] %s 부분 추가. 남은 수량: %d개. 행위자: %s")
+		       , __FUNCTION__, *ItemActor->GetName(), RemainQuantity, *GetOwner()->GetName());
 	}
 	else if (RemainQuantity == -1) // 전부 실패
 	{
 		// 아이템 액터 잔존 및 아이템 데이터 변경 없음
-		UE_LOG(LogTemp, Warning, TEXT("[TryAddItemToInventory]  (%s) 전부 추가 실패"), *ItemActor->GetName());
+		//UE_LOG(LogTemp, Warning, TEXT("[TryAddItemToInventory]  (%s) 전부 추가 실패"), *ItemActor->GetName());
 	}
 	
 	return RemainQuantity;

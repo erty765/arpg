@@ -718,7 +718,7 @@ void ANACharacter::TryInteraction()
 	
 	if (ensure(InteractionComponent != nullptr))
 	{
-		// 인벤토리 정보는 클라이언트에서 개별적으로 관리 
+		// 인벤토리 정보는 클라이언트에서 개별적으로 관리
 		InteractionComponent->ToggleInteraction();
 	}
 }

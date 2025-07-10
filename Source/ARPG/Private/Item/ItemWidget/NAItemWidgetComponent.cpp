@@ -17,7 +17,7 @@ UNAItemWidgetComponent::UNAItemWidgetComponent(const FObjectInitializer& ObjectI
 	// off to improve performance if you don't need them.
 	PrimaryComponentTick.bCanEverTick = true;
 
-	SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	SetCollisionProfileName(TEXT("NoCollision"));
 	SetGenerateOverlapEvents(false);
 	SetEnableGravity(false);
 	CanCharacterStepUpOn = ECB_No;
