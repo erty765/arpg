@@ -505,12 +505,64 @@ bReplicates = true로 설정되어 있으며, bWasChildActor와 같은 프로퍼
 ◎ PostSpawnInitialize: SpawnActor에서만 호출됨
 
 ◎ 버그 1: 레벨에 배치한 아이템 액터(아이템 콜리전이 루트로 가는 인스턴스들): 피직스 시뮬레이트 안됨
-◎ 버그 2: 게스트 클라의 상호작용 시도가 안됨
+◎ 버그 2: 게스트 클라의 상호작용 시도가 안됨 -> 일단 해결
 └ Interactable Focus에 추가하는건 잘 적용됨(서버/클라 캐릭터 나눠서 각 캐릭터의 Interaction 컴포넌트에 등록)
 └ 클라에서 상호작용 호출(ToggleInteraction)하면, NACharactor1(서버)의 ToggleInteraction이 호출됨.
+-> 각 클라에서 바로 상호작용 처리함. 단, 지금 서버 동기화 처리는 안되어있는 상태(서버 캐릭터가 상호작용 함 ->이 사실을 게스트 클라에 전달하는 동기화 로직이 없음. 아이템 줍기의 경우, 동기화 처리가 안된다면, ex) 1110번(일련번호) 아이템이 서버 캐릭터의 소유가 되었는데, 클라 입장에서는 1110번 아이템이 여전히 월드에 놓여있다고 인식함)
 
 [07/09]
 ◎ 아이템 ID(일련번호) 따로 빼기: 아이템 엔진 서브시스템에다가 두기. 
 각 클라의 아이템 서브시스템에서 일련번호 생성하는 알고리즘 똑같이 두기 -> 아이템 데이터 인스턴스는 각자 만들더라도, 일련번호는 동일하게 맞추기
 ◎ 아이템 데이터의 가변 정보 서버 동기화: 알고리즘 자체는 한번만 작성하고, 이 알고리즘을 트리거하는 시점만 동기화.(ex- 서버 클라의 캐릭터가 1111번 아이템의 수량을 1로 바꾸려고 할때, 서버 클라 및 게스트 클라 동시에 1111번의 아이템 데이터 인스턴스의 수량을 1로 바꾸는 로직을 트리거)
 └ 이 아이템이 특정 클라의 인벤토리에 적재되었다! -> 이것도 적재하는 알고리즘은 동일하게 두고, 알고리즘 실행 트리거만 동기화.(어디서 어떤 아이템을 인벤토리에 넣을거다! -> 서버 & 클라: (어디)의 인벤토리에 (어떤) 아이템이 적재되었다!)
+
+[07/10]
+◎ 버그3: 게스트 클라가 런타임에 스폰된 아이템 액터를 줍고 난 후, 아이템 액터가 안사라짐. -> 해당 아이템 액터를 계속 추가함
+-> 인벤토리의 TryAddItem에서 이미 동일한 아이템 인스턴스를 보유 중이면 로직 중단
+└ 클라에서 DestoryActor를 호출할 때
+if( IsGameWorld() )
+	{
+		// Note, for Standalone games, Actors should have Authority == ROLE_Authority.
+		// In that sense, they'll be treated as Network Actors here.
+		const bool bIsNetworkedActor = ThisActor->GetLocalRole() != ROLE_None;
+
+const bool bCanDestroyNetworkActor = ThisActor->GetLocalRole() == ROLE_Authority || bNetForce || ThisActor->bNetTemporary;
+		if (bIsNetworkedActor && !bCanDestroyNetworkActor)
+		{
+			return false;
+		}
+여기서 걸려서 제거 로직 실행안됨.
+bIsNetworkedActor == true    bCanDestroyNetworkActor == false
+드롭된 아이템 액터->Role == ROLE_SimulatedProxy
+드롭된 아이템 액터->RemoteRole == ROLE_Authority
+-> 아이템 액터 지우기: 서버에게 짬때리기: 시도 결과, 이렇게 하면 안됨~!
+
+월드에 이미 배치되어있던 아이템 액터: 
+bIsNetworkedActor == false    bCanDestroyNetworkActor == false
+Outer == PersistentLevel
+Role == ROLE_None
+RemoteRole == ROLE_Authority
+-> 클라에서 이 아이템 액터에 Destroy를 실행하면 바로 지워짐.
+
+[해결한줄 알았는데 No..: bIsNetworkedActor 조건 판별 후 Destroy(bNetForce = true);를 호출)
+ANAItemActor::DestroyItemActor()
+//...
+if ( bIsNetworkedActor = ThisActor->GetLocalRole() != ROLE_None)
+{
+	Destroy(bNetForce = true, bShouldModifyLevel = true);
+}
+else { Destroy(); }
+
+##  Note, for Standalone games, Actors should have Authority == ROLE_Authority.
+      In that sense, they'll be treated as Network Actors here.
+→ 스탠드얼론 모드에서도 ROLE_Authority가 적용되기 때문에, 네트워크 게임이 아니더라도 이 조건(!= ROLE_None)을 만족하면 네트워크 액터처럼 다룬다는 뜻.
+즉, bIsNetworkedActor는 단순히 **"멀티플레이 중인 액터인가?"**가 아니라,
+**"현재 게임 세계에서 네트워크 레플리케이션 규칙에 따라 관리받는 액터인가?"**를 판단하는 조건.
+
+## ROLE_None은 "네트워크와 전혀 상관 없는 액터", 비네트워크 액터 / 독립적인 로컬 액터라는 뜻. (월드에 미리 배치된 아이템 액터의 경우가 여기에 해당)]
+-> 이 방법으로 하면 클라에서만 아이템 액터가 지워지고, 서버에서는 안지워짐
+
+[통수: 블프 에디터에서 리플리케이션 설정 bool이 다 꺼져있었음z]
+└ 엔딩: ToggleInteraction()에 RPC 적용 (Interaction Component에서)
+
+[피직스 시뮬레이션: 서버하고 클라 둘 다 켜두기. 엔진이 알아서 시뮬레이션 최적화 해줌]
