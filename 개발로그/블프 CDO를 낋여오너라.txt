@@ -179,3 +179,36 @@ NewObject -> FObjectInitializer::InitProperties #4037 -> #4178
 				}
 
 - AActor::RootComponent는 UPROPERTY가 붙어있어서 루트 컴포넌트는 사실상 강제로 패키지에 들어가 있어야 함 (다시 말해, CreateDefaultSubObject의 bTransient 플래그를 쓸 수가 없단 뜻)
+
+블프 에디터에서 캡슐 콜리전 반지름 수치 바꿨을때(70에서 71로)
+: OnConsturction이 몇번 들어오는가?
+1트: 0xb68090d0e00,	70,	RF_Transactional | RF_Transient | RF_DefaultSubObject
+2트: 0xb68090d0e00,	70,	RF_Transactional | RF_Transient | RF_DefaultSubObject
+3트: 0xb68090d0e00,	70,	RF_Transactional | RF_Transient | RF_DefaultSubObject
+->일단 안바뀜
+
+이 상태(Dirty 및 컴파일 노란 물음표)에서 컴파일 누름
+: OnConsturction이 몇번 들어오는가?
+1트: 0xb680d5eee00,	70, 	RF_Transactional | RF_Transient | RF_DefaultSubObject
+2트: 0xb680d5eee00,	70,	RF_Transactional | RF_Transient | RF_DefaultSubObject
+3트: 0xb680d5eee00,	70,	RF_Transactional | RF_Transient | RF_DefaultSubObject
+4트: 0xb680d5eee00,	70,	RF_Transactional | RF_Transient | RF_DefaultSubObject
+-> 여전히 안바뀜
+
+PostCDOCompiled에서 ReconstructSubobjects 어쩌구:
+바뀐 객체에 어태치 자식들 수동으로 옮겨줘야 함. 근데 상황이 좀 이상함??
+BP_ItemTest의 경우)
+ItemMesh(Skeletal) (Old)에 원래 TestArrow가 붙어있음.
+근데 ItemMesh(Skeletal)는 어태치 자식이 empty임. (왜)
+근데 TestArrow의 어태치 부모는 ItemMesh(Skeletal)라고 나옴. (이건 문제 없는데)
+그래서 OwnedComponent 순회하면서 ItemMesh(Skeletal)가 어태치 부모라고 뜨는 서브오브젝트들을 골라내야함.
+이후 다시 OwnedComponents 순회하면서 프로퍼티에 새로 바뀐 객체 주소 넣는 작업할때,
+아까 골라놓은 서브오브젝트들을 바뀐 객체에 붙여줌
+
+아니 다시 확인하니까 어태치 칠드런에 또 잘 들어가있음. 뭐냐고
+CDO의 경우: OwnedComponent 순회하면서 찾기
+그외: 어태치 차일드 바로 가지고 오기
+
+블루프린트 에디터에서 추가한 서브오브젝트(BP_Test의 TestMesh):
+PostCDOCompiled 시점에, OwnedComponents 목록에 TestMesh가 아예 없음
+OnConstruction(CDO x) 시점의 OwnedComponents 목록에 TestMesh가 생김
