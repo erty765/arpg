@@ -40,8 +40,33 @@ public:
    bool IsRegisteredItemMetaClass(UClass* ItemClass) const;
    void RegisterNewItemMetaData(UClass* NewItemClass, const UDataTable* InDataTable, const FName InRowName);
    void VerifyItemMetaDataRowHandle(UClass* ItemClass, const UDataTable* InDataTable, const FName InRowName);
+
+   // WITH_EDITOR 전용
+   template<typename ItemDTRow_T = FNAItemBaseTableRow>
+      requires TIsDerivedFrom<ItemDTRow_T, FNAItemBaseTableRow>::IsDerived
+   ItemDTRow_T* GetItemMetaDataStructs(UClass* InItemActorClass) const
+   {
+      if (!InItemActorClass->IsChildOf<ANAItemActor>()) return nullptr;
+      if (!IsItemMetaDataInitialized()) return nullptr;
+      
+      UClass* Key = InItemActorClass;
+      if (UBlueprintGeneratedClass* BPClass = Cast<UBlueprintGeneratedClass>(InItemActorClass))
+      {
+         if (UBlueprint* BP = Cast<UBlueprint>(BPClass->ClassGeneratedBy))
+         {
+            Key = BP->GeneratedClass.Get();
+         }
+      }
+      Key = Key ? Key : InItemActorClass;
+
+      if (const FDataTableRowHandle* Value = ItemMetaDataMap.Find(Key))
+      {
+         return Value->GetRow<ItemDTRow_T>(Value->RowName.ToString());
+      }
+      return nullptr;
+   }
 #endif
-    
+
    static UNAItemEngineSubsystem* Get()
    {
       if (GEngine)
@@ -194,7 +219,7 @@ public:
          }
       }
    }
-    
+   
 protected:
    FORCEINLINE bool IsSoftItemMetaDataInitialized() const {
       return bSoftMetaDataInitialized;

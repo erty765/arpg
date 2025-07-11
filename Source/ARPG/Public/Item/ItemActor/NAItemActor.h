@@ -16,8 +16,10 @@ enum class EItemSubobjDirtyFlags : uint8
 {
 	ISDF_None	= (0x0),
 	
-	ISDF_CollisionShape		= (1<<0),
+	ISDF_CollisionShape			= (1<<0),
 	ISDF_MeshType				= (1<<1),
+	ISDF_CollisionProperties 	= (1<<2),
+	ISDF_MeshProperties			= (1<<3),
 };
 ENUM_CLASS_FLAGS(EItemSubobjDirtyFlags)
 
@@ -128,6 +130,8 @@ public:
 	virtual void ReleaseItemWidgetComponent();
 	virtual void CollapseItemWidgetComponent();
 	
+	void FinalizeAndDestroyAfterInventoryAdded(AActor* Interactor);
+	
 protected:
 	virtual EItemSubobjDirtyFlags GetDirtySubobjectFlags(const FNAItemBaseTableRow* MetaData) const;
 	
@@ -146,21 +150,28 @@ protected:
 	/** 기존 루트 컴포넌트를 제거하고, ItemCollision을 새로운 루트로 설정한 뒤, 기존 자식 컴포넌트들을 이관 */
 	virtual void ReplaceRootWithItemCollisionIfNeeded();
 	
-	virtual void SetItemSubobjectsPhysics(const bool bEnable);
+	/**
+	 * 현재 아이템 메타데이터를 기반으로 동적 서브오브젝트(콜리전 및 메시 컴포넌트 등)를 재구성.
+	 * 메타데이터 기준에 더 이상 부합하지 않는 불필요한 컴포넌트는 제거.
+	 */
+	virtual void ReconstructItemSubobjectsFromMetaData();
 	
 #if WITH_EDITOR || WITH_EDITORONLY_DATA
-	void ReviseSubobjectsHierarchy();
+	virtual void UpdateItemMetaData();
+	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
+	virtual void PostEditChangeChainProperty(struct FPropertyChangedChainEvent& PropertyChangedEvent) override;
+	virtual void PostCDOCompiled(const FPostCDOCompiledContext& Context) override;
 #endif
+	
 private:
+	void InitItemSubobjectsAttachment();
+	void InitItemSubobjectsProperties();
 	void InitItemData();
 	void VerifyInteractableData();
 	void InitCheckIfChildActor();
-	
-	void InitItemSubobjectsAttachment();
-	void InitItemSubobjectsCollision();
 
 protected:
-	friend struct FNAItemBaseTableRow;
+	static bool bShouldDoLazyCompile;
 	
 	// Optional Subobject
 	uint8 bNeedItemCollision :1 = true;
@@ -169,15 +180,15 @@ protected:
 	uint8 bNeedItemMesh :1 = true;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Replicated, Category="Item Actor")
-	bool bWasChildActor = false;
+	uint8 bWasChildActor : 1 = false;
 	
 	UPROPERTY(Transient, NonTransactional, VisibleAnywhere, BlueprintReadOnly, Category="ItemActor")
 	USceneComponent* StubRootComponent;
 	
-	UPROPERTY(Transient, NonTransactional, VisibleAnywhere, BlueprintReadOnly, Category="Item Actor | Collision Shape")
+	UPROPERTY(Transient,/* Instanced,*/ NonTransactional, VisibleAnywhere, BlueprintReadOnly, Category="Item Actor | Collision Shape")
 	UShapeComponent* ItemCollision;
 
-	UPROPERTY(Transient, NonTransactional, VisibleAnywhere, Category = "Item Actor | Mesh")
+	UPROPERTY(Transient,/* Instanced,*/ NonTransactional, VisibleAnywhere, Category = "Item Actor | Mesh")
 	UMeshComponent* ItemMesh;
 
 	UPROPERTY(VisibleAnywhere, Category = "Item Actor | Static Mesh")
@@ -195,7 +206,10 @@ protected:
 private:
 	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "Item Actor", meta = (AllowPrivateAccess = "true"))
 	FName ItemDataID;
-
+	
+	uint8 bInitItemSubobjectsAttachment : 1 = false;
+	uint8 bInitItemSubobjectsProperties : 1 = false;
+	
 //======================================================================================================================
 // Interactable Interface Implements
 //======================================================================================================================

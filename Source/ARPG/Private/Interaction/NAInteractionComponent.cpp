@@ -631,9 +631,9 @@ int32 UNAInteractionComponent::TryAddItemToInventory(ANAItemActor* ItemActor)
 		UE_LOG(LogTemp, Warning, TEXT("[%hs] %s 전부 추가 성공. 행위자: %s")
 			, __FUNCTION__, *ItemActor->GetName(), *GetOwner()->GetName());
 		
-		if ( ItemActor->HasAuthority() )
+		if (ItemActor->HasAuthority())
 		{
-			ItemActor->Destroy();
+			ItemActor->FinalizeAndDestroyAfterInventoryAdded(GetOwner());
 		}
 	}
 	else if (RemainQuantity > 0) // 부분 추가

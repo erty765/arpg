@@ -208,6 +208,7 @@ struct ARPG_API FNAItemBaseTableRow : public FTableRowBase
 	
 	UPROPERTY(EditAnywhere,/* Category = "Item Interactable Data", */meta=(ShowOnlyInnerProperties))
 	FNAInteractableData InteractableData;
+
 	
 #if WITH_EDITOR
 protected:
