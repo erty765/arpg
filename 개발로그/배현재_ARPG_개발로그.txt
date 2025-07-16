@@ -566,3 +566,26 @@ else { Destroy(); }
 └ 엔딩: ToggleInteraction()에 RPC 적용 (Interaction Component에서)
 
 [피직스 시뮬레이션: 서버하고 클라 둘 다 켜두기. 엔진이 알아서 시뮬레이션 최적화 해줌]
+
+[07/16]
+◎ 블프 에디터에서 추가한 서브오브젝트 계층 구조: ItemCollision이나 ItemMesh에 붙인 경우, 데이터 테이블에서 해당 프로퍼티들 바뀌면 밑에 딸린 서브오브젝트(블프에서 추가된)가 루트 컴포넌트에 붙음.
+
+◎AActor::PostCDOCompiled: 블프 클래스 컴파일에 호출되지만, 네이티브 클래스 입장으로 호출됨.
+
+◎ 블프에디터의 서브오브젝트 계층트리에서 템플릿 컴포넌트의 이름을 변경했을 때:
+ANAItemActor::PostCDOCompiled(CDO에 먼저 컴파일 한 후)
+...
+ANAItemActor::PostEditChangeProperty -> AActor::RerunConstructionScripts->AActor::ExecusteConstruction->ANAItemActor::OnConstruction
+
+◎ 블프에디터의 서브오브젝트 계층트리에 새로운 템플릿 컴포넌트를 추가했을 때:
+ANAItemActor::PostCDOCompiled(CDO에 먼저 컴파일 한 후)
+...
+ANAItemActor::PostEditChangeProperty->AActor::RerunConstructionScripts->AActor::ExecuteConstruction->ANAItemActor::OnConstruction
+
+◎ 레벨에 미리 배치된 아이템 액터, 레벨 로드 시 코드에서 동적 서브오브젝트(ItemCollision | ItemMesh)에 붙인 서브오브젝트 떨어져있음
+(BP_Test의 TestArrow(ANAItemTest에서 추가됨)가 어디에도 붙어있지 않음)
+└ 일반 인스턴스에서, 동적 서브오브젝트에 코드로 붙인 서브오브젝트가 제대로 붙여지지 않음.
+(OnConstruction에서 어태치 자식 입장에서 어태치 부모가 null, 어태치 부모 입장에서 어태치 자식 배열에 해당 서브오브젝트 없음)
+
+◎ 해결해야 할 버그:
+1. 동적으로 구성되는 서브오브젝트(ItemCollision || ItemMesh)에 코드로 어태치된 서브오브젝트가 있는 경우, 만약 에디터 런타임 중 해당 객체의 어태치 부모를 변경하면

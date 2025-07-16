@@ -212,3 +212,93 @@ CDO의 경우: OwnedComponent 순회하면서 찾기
 블루프린트 에디터에서 추가한 서브오브젝트(BP_Test의 TestMesh):
 PostCDOCompiled 시점에, OwnedComponents 목록에 TestMesh가 아예 없음
 OnConstruction(CDO x) 시점의 OwnedComponents 목록에 TestMesh가 생김
+
+블루프린트 에디터의 서브오브젝트 계층트리에 직접 추가하는 서브오브젝트들의 CreationMethod는 EComponentCreationMethoed::SimpleConstructionScript
+
+BPGC의 SimpleConstructionScript에서 GetAllNodes(): 해당 블프 클래스의 서브오브젝트들 중 '블프 에디터에서 템플릿 컴포넌트로서 추가된' 서브오브젝트들의 생성 정보(USCS_Node 형태)를 가져옴.
+
+USCS_Node의 ParentComponentOrVariableName: 해당 노드의 어태치 부모가 될 서브오브젝트(USceneComponent 계열)의 이름 FName
+
+코드 수정 후 테스트 결과:
+(ItemMesh(Static)에서 ItemMesh(Skeletal)로 바꾼 상황)
+ANAItemActor::ReconstructItemSubobjectsFromMetaData 호출 중...
+A. PostCDOCompiled에 의해 호출된 경우: (this == 블프CDO)
+ParentComponentOrVariableName의 값이 아직 변경되지 않음(ItemMesh(Static)).
+이때 ParentComponentOrVariableName의의 값을 새로 바뀐 객체의 이름으로 변경(ItemMesh(Skeletal))
+B. OnConstruction에 의해 호출된 경우: (this == 일반 인스턴스)
+ParentComponentOrVariableName의 값이 이미 변경되어 있음 ItemMesh(Skeletal)
+(CDO 컴파일 시점에 A. 작업이 이루어졌기 때문인 것으로 추정)
+
++ 레벨에 배치된 인스턴스에도 잘 적용되는 것을 확인(블프 에디터에서 발생한 컴파일 기준)
+
+---------
+TFieldIterator<FObjectProperty> 사용 예시
+// 부모, 자식에서 Property로 설정된 컴포넌트들을 조회
+		// 최종적으로 프로퍼티에 남은 컴포넌트 주소들을 확인
+		TSet<UActorComponent*> SubObjsActorComponents;
+		for ( TFieldIterator<FObjectProperty> It ( GetClass() ); It; ++It )
+		{
+			if ( It->PropertyClass->IsChildOf( UActorComponent::StaticClass() ) )
+			{
+				if ( UActorComponent* Component = Cast<UActorComponent>( It->GetObjectPropertyValue_InContainer( this ) ) )
+				{
+					SubObjsActorComponents.Add( Component );
+				}
+			}
+		}
+		// 마지막으로 등록된 컴포넌트들을 순회하면서 프로퍼티에 없는 컴포넌트들을 삭제
+		for (UActorComponent* OwnedComponent : GetComponents().Array())
+		{
+			if (USceneComponent* OwnedSceneComp = Cast<USceneComponent>(OwnedComponent))
+			{
+				if (SubObjsActorComponents.Contains( OwnedComponent ))
+				{
+					if (OwnedSceneComp != GetRootComponent())
+					{
+						if (ItemCollision && OwnedSceneComp != ItemCollision && OwnedSceneComp->GetAttachParent()
+							&& OwnedSceneComp->GetAttachParent()->GetName().StartsWith(TEXT("ItemCollision")))
+						{
+							if (HasAnyFlags(RF_ClassDefaultObject))
+							{
+								OwnedSceneComp->SetupAttachment(ItemCollision);
+							}
+							else
+							{
+								OwnedSceneComp->AttachToComponent(ItemCollision,FAttachmentTransformRules::KeepRelativeTransform);
+							}
+						}
+						if (ItemMesh && OwnedSceneComp != ItemMesh && OwnedSceneComp->GetAttachParent()
+							&& OwnedSceneComp->GetAttachParent()->GetName().StartsWith(TEXT("ItemMesh")))
+						{
+							if (HasAnyFlags(RF_ClassDefaultObject))
+							{
+								OwnedSceneComp->SetupAttachment(ItemMesh);
+							}
+							else
+							{
+								OwnedSceneComp->AttachToComponent(ItemMesh,FAttachmentTransformRules::KeepRelativeTransform);
+							}
+						}
+					}
+					continue;
+				}
+				TArray<USceneComponent*> AttachedChildren = OwnedSceneComp->GetAttachChildren();
+				for (USceneComponent* Child : AttachedChildren)
+				{
+					if (IsValid(Child))
+					{
+						Child->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
+					}
+				}
+				AttachedChildren.Empty();
+				OwnedSceneComp->ClearFlags(RF_Standalone | RF_Public);
+				OwnedSceneComp->DestroyComponent();
+				RemoveInstanceComponent(OwnedSceneComp);
+			}
+		}
+-------------------------
+
+CDO의 경우: OwnedComponents 순회하면서 "어태치 자식 입장에서 어태치 부모 확인하기"
+일반 인스턴스의 경우: OwnedComponents에서 ItemCollision 또는 ItemMesh 이름으로 찾고, 해당 객체의 어태치 자식 배열 확인하기.
+
+
