@@ -1,10 +1,13 @@
 
 #include "Item/ItemActor/NAItemActor.h"
 
+#include "FileHelpers.h"
 #include "NACharacter.h"
 #include "Components/SphereComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Engine/SCS_Node.h"
+#include "Engine/SimpleConstructionScript.h"
 #include "Interaction/NAInteractionComponent.h"
 #include "GeometryCollection/GeometryCollectionObject.h"
 #include "Item/ItemWidget/NAItemWidgetComponent.h"
@@ -90,7 +93,7 @@ ANAItemActor::ANAItemActor(const FObjectInitializer& ObjectInitializer)
 	InitItemSubobjectsProperties();
 	
 	bAlwaysRelevant = true;
-	SetReplicates(true);
+	bReplicates = true;
 	SetReplicateMovement(true);
 	
 	ItemDataID = NAME_None;
@@ -381,7 +384,6 @@ void ANAItemActor::ReplaceRootWithItemCollisionIfNeeded()
 }
 
 #if WITH_EDITOR || WITH_EDITORONLY_DATA
-
 void ANAItemActor::UpdateItemMetaData()
 {
 	if (!UNAItemEngineSubsystem::Get()
@@ -459,243 +461,317 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 	const FNAItemBaseTableRow* MetaData
 		= UNAItemEngineSubsystem::Get()->GetItemMetaDataByClass(GetClass());
 	if (!MetaData) return;
-	
+
+	Modify();
 	const EItemSubobjDirtyFlags DirtyFlags = GetDirtySubobjectFlags(MetaData);
-	
-	UClass* NewItemCollisionClass = nullptr;
-	TArray<USceneComponent*> OldItemCollisionChildren;
-	if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionShape))
+	if (EnumHasAnyFlags(DirtyFlags,
+		EItemSubobjDirtyFlags::ISDF_CollisionShape | EItemSubobjDirtyFlags::ISDF_MeshType))
 	{
-		switch (MetaData->CollisionShape)
-		{
-		case EItemCollisionShape::ICS_Sphere:
-			NewItemCollisionClass = USphereComponent::StaticClass();
-			break;
-		case EItemCollisionShape::ICS_Box:
-			NewItemCollisionClass = UBoxComponent::StaticClass();
-			break;
-		case EItemCollisionShape::ICS_Capsule:
-			NewItemCollisionClass = UCapsuleComponent::StaticClass();
-			break;
-		default:
-			break;
-		}
-		if (NewItemCollisionClass && ItemCollision && ItemCollision->GetClass() != NewItemCollisionClass)
-		{
-			if (HasAnyFlags(RF_ClassDefaultObject))
+		if (!HasAnyFlags(RF_ClassDefaultObject))
+		{	
+			if (ANAItemActor* ItemActorCDO = Cast<ANAItemActor>(GetClass()->GetDefaultObject(false)))
 			{
-				for (UActorComponent* OwnedActorComp : GetComponents().Array())
+				// CDO에서 서브오브젝트 계층 구조 수정 전이면 리턴.
+				const EItemSubobjDirtyFlags CDODirtyFlags = ItemActorCDO->GetDirtySubobjectFlags(MetaData);
+				if (EnumHasAnyFlags(CDODirtyFlags,
+					EItemSubobjDirtyFlags::ISDF_CollisionShape | EItemSubobjDirtyFlags::ISDF_MeshType))
 				{
-					if (USceneComponent* OwnedSceneComp = Cast<USceneComponent>(OwnedActorComp))
+					return;
+				}
+			}
+		}
+		struct FNASubobjectAttachInfo
+		{
+			USceneComponent* Subobject;
+			FName AttachSocketName;
+		};
+
+		UClass* NewItemCollisionClass = nullptr;
+		TArray<FNASubobjectAttachInfo> OldItemCollisionChildren;
+		if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionShape))
+		{
+			switch (MetaData->CollisionShape)
+			{
+			case EItemCollisionShape::ICS_Sphere:
+				NewItemCollisionClass = USphereComponent::StaticClass();
+				break;
+			case EItemCollisionShape::ICS_Box:
+				NewItemCollisionClass = UBoxComponent::StaticClass();
+				break;
+			case EItemCollisionShape::ICS_Capsule:
+				NewItemCollisionClass = UCapsuleComponent::StaticClass();
+				break;
+			default:
+				break;
+			}
+		
+			if (NewItemCollisionClass && ItemCollision)
+			{
+				if (HasAnyFlags(RF_ClassDefaultObject))
+				{
+					for (UActorComponent* OwnedActorComp : GetComponents().Array())
 					{
-						if (OwnedSceneComp->GetAttachParent() == ItemCollision)
+						if (OwnedActorComp == GetRootComponent()) continue;
+						if (USceneComponent* OwnedSceneComp = Cast<USceneComponent>(OwnedActorComp))
 						{
-							OwnedSceneComp->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
-							OldItemCollisionChildren.Add(OwnedSceneComp);
+							if (OwnedSceneComp->GetAttachParent() == ItemCollision)
+							{
+								FNASubobjectAttachInfo AttachInfo;
+								AttachInfo.Subobject = OwnedSceneComp;
+								AttachInfo.AttachSocketName = OwnedSceneComp->GetAttachSocketName();
+								OldItemCollisionChildren.Add(AttachInfo);
+								OwnedSceneComp->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
+							}
+						}
+					}
+				}
+				else
+				{
+					if (ItemCollision->GetAttachChildren().Num() > 0)
+					{
+						TArray<USceneComponent*> OldAttachChildren = ItemCollision->GetAttachChildren();
+						for (USceneComponent* AttachChild : OldAttachChildren)
+						{
+							if (IsValid(AttachChild))
+							{
+								FNASubobjectAttachInfo AttachInfo;
+								AttachInfo.Subobject = AttachChild;
+								AttachInfo.AttachSocketName = AttachChild->GetAttachSocketName();
+								OldItemCollisionChildren.Add(AttachInfo);
+								AttachChild->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
+							}
+						}
+					}
+				}
+
+				if (ItemCollision->GetClass() != NewItemCollisionClass)
+				{
+					ItemCollision->ClearFlags(RF_Standalone | RF_Public);
+					ItemCollision->DestroyComponent();
+					RemoveInstanceComponent(ItemCollision);
+				}
+			}
+		}
+
+		UClass* NewItemMeshClass = nullptr;
+		TArray<FNASubobjectAttachInfo> OldItemMeshChildren;
+		if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_MeshType))
+		{
+			switch (MetaData->MeshType)
+			{
+			case EItemMeshType::IMT_Skeletal:
+				NewItemMeshClass = USkeletalMeshComponent::StaticClass();
+				break;
+			case EItemMeshType::IMT_Static:
+				NewItemMeshClass = UStaticMeshComponent::StaticClass();
+				break;
+			default:
+				break;
+			}
+			if (NewItemMeshClass && ItemMesh)
+			{
+				if (HasAnyFlags(RF_ClassDefaultObject))
+				{
+					for (UActorComponent* OwnedActorComp : GetComponents().Array())
+					{
+						if (OwnedActorComp == GetRootComponent()) continue;
+						if (USceneComponent* OwnedSceneComp = Cast<USceneComponent>(OwnedActorComp))
+						{
+							if (OwnedSceneComp->GetAttachParent() == ItemMesh)
+							{
+								FNASubobjectAttachInfo AttachInfo;
+								AttachInfo.Subobject = OwnedSceneComp;
+								AttachInfo.AttachSocketName = OwnedSceneComp->GetAttachSocketName();
+								OldItemMeshChildren.Add(AttachInfo);
+								OwnedSceneComp->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
+							}
+						}
+					}
+				}
+				else
+				{
+					if (ItemMesh->GetAttachChildren().Num() > 0)
+					{
+						TArray<USceneComponent*> OldAttachChildren = ItemMesh->GetAttachChildren();
+						for (USceneComponent* AttachChild : OldAttachChildren)
+						{
+							if (IsValid(AttachChild))
+							{
+								FNASubobjectAttachInfo AttachInfo;
+								AttachInfo.Subobject = AttachChild;
+								AttachInfo.AttachSocketName = AttachChild->GetAttachSocketName();
+								OldItemMeshChildren.Add(AttachInfo);
+								AttachChild->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
+							}
+						}
+					}
+				}
+			
+				if (ItemMesh->GetClass() != NewItemMeshClass)
+				{
+					ItemMesh->ClearFlags(RF_Standalone | RF_Public);
+					ItemMesh->DestroyComponent();
+					RemoveInstanceComponent(ItemMesh);
+				}
+			}
+		}
+
+		// 에디터 런타임 중 바뀐 ItemCollision과 ItemMesh: 기본 생성자에 의해 객체는 만들어졌으나,
+		// (현 시점에서) 프로퍼티에 담기지는 않음. 여기서 수동으로 재할당 + Attach Children 이전 
+		for (UActorComponent* OwnedActorComp : GetComponents().Array())
+		{
+			if (!IsValid(OwnedActorComp)) continue;
+
+			if (NewItemCollisionClass 
+				&& OwnedActorComp->GetClass()->IsChildOf(NewItemCollisionClass)
+				&& OwnedActorComp->GetName().StartsWith(TEXT("ItemCollision")))
+			{
+				if (UShapeComponent* NewItemCollision = Cast<UShapeComponent>(OwnedActorComp))
+				{
+					ItemCollision = NewItemCollision;
+					if (OldItemCollisionChildren.Num() > 0)
+					{
+						for (FNASubobjectAttachInfo ItemCollisionChild : OldItemCollisionChildren)
+						{
+							if (IsValid(ItemCollisionChild.Subobject))
+							{
+								if (HasAnyFlags(RF_ClassDefaultObject))
+								{
+									ItemCollisionChild.Subobject->SetupAttachment(ItemCollision
+										, ItemCollisionChild.AttachSocketName);
+								}
+								else
+								{
+									ItemCollisionChild.Subobject->AttachToComponent(ItemCollision
+										, FAttachmentTransformRules::KeepRelativeTransform
+										, ItemCollisionChild.AttachSocketName);
+								}
+							}
 						}
 					}
 				}
 			}
-			else
+			else if (NewItemMeshClass
+				&& OwnedActorComp->GetClass()->IsChildOf(NewItemMeshClass)
+				&& OwnedActorComp->GetName().StartsWith(TEXT("ItemMesh")))
 			{
-				if (ItemCollision->GetAttachChildren().Num() > 0)
+				if (UMeshComponent* NewItemMesh = Cast<UMeshComponent>(OwnedActorComp))
 				{
-					OldItemCollisionChildren = ItemCollision->GetAttachChildren();
-					for (USceneComponent* Child : OldItemCollisionChildren)
+					ItemMesh = NewItemMesh;
+					if (OldItemMeshChildren.Num() > 0)
 					{
-						if (IsValid(Child))
+						for (FNASubobjectAttachInfo ItemMeshChild : OldItemMeshChildren)
 						{
-							Child->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
+							if (IsValid(ItemMeshChild.Subobject))
+							{
+								if (HasAnyFlags(RF_ClassDefaultObject))
+								{
+									ItemMeshChild.Subobject->SetupAttachment(ItemMesh
+										, ItemMeshChild.AttachSocketName);
+								}
+								else
+								{
+									ItemMeshChild.Subobject->AttachToComponent(ItemMesh
+										, FAttachmentTransformRules::KeepRelativeTransform
+										, ItemMeshChild.AttachSocketName);
+								}
+							}
 						}
 					}
 				}
 			}
-			ItemCollision->ClearFlags(RF_Standalone | RF_Public);
-			ItemCollision->DestroyComponent();
-			RemoveInstanceComponent(ItemCollision);
 		}
-	}
-	UClass* NewItemMeshClass = nullptr;
-	TArray<USceneComponent*> OldItemMeshChildren;
-	if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_MeshType))
-	{
-		switch (MetaData->MeshType)
+		OldItemCollisionChildren.Empty();
+		OldItemMeshChildren.Empty();
+
+#if WITH_EDITOR || WITH_EDITORONLY_DATA
+		if (UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(GetClass()))
 		{
-		case EItemMeshType::IMT_Skeletal:
-			NewItemMeshClass = USkeletalMeshComponent::StaticClass();
-			break;
-		case EItemMeshType::IMT_Static:
-			NewItemMeshClass = UStaticMeshComponent::StaticClass();
-			break;
-		default:
-			break;
-		}
-		if (NewItemMeshClass && ItemMesh && ItemMesh->GetClass() != NewItemMeshClass)
-		{
-			if (HasAnyFlags(RF_ClassDefaultObject))
+			TArray<USCS_Node*> SCSNodes =  BPGC->SimpleConstructionScript->GetAllNodes();
+			if (SCSNodes.Num() > 0)
 			{
-				for (UActorComponent* OwnedActorComp : GetComponents().Array())
+				for (USCS_Node* SCSNode : SCSNodes)
 				{
-					if (USceneComponent* OwnedSceneComp = Cast<USceneComponent>(OwnedActorComp))
+					FName ParentComponentName = SCSNode->ParentComponentOrVariableName;
+				
+					if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionShape))
 					{
-						if (OwnedSceneComp->GetAttachParent() == ItemMesh)
+						if (ParentComponentName.ToString().StartsWith(TEXT("ItemCollision"))
+							&& ParentComponentName != ItemCollision->GetFName())
 						{
-							OwnedSceneComp->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
-							OldItemMeshChildren.Add(OwnedSceneComp);
+							SCSNode->ParentComponentOrVariableName = ItemCollision->GetFName();
+						}
+					}
+					if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_MeshType))
+					{
+						if (ParentComponentName.ToString().StartsWith(TEXT("ItemMesh"))
+							&& ParentComponentName != ItemMesh->GetFName())
+						{
+							SCSNode->ParentComponentOrVariableName = ItemMesh->GetFName();
 						}
 					}
 				}
 			}
-			else
-			{
-				if (ItemMesh->GetAttachChildren().Num() > 0)
-				{
-					OldItemMeshChildren = ItemMesh->GetAttachChildren();
-					for (USceneComponent* Child : OldItemMeshChildren)
-					{
-						if (IsValid(Child))
-						{
-							Child->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
-						}
-					}
-				}
-			}
-			ItemMesh->ClearFlags(RF_Standalone | RF_Public);
-			ItemMesh->DestroyComponent();
-			RemoveInstanceComponent(ItemMesh);
 		}
+#endif
 	}
 
-	// 에디터 런타임 중 바뀐 ItemCollision과 ItemMesh: 기본 생성자에 의해 객체는 만들어졌으나,
-	// (현 시점에서) 프로퍼티에 담기지는 않음. 여기서 수동으로 넣어줌.
-	for (UActorComponent* OwnedActorComp : GetComponents().Array())
-	{
-		if (!IsValid(OwnedActorComp)) continue;
-		if (NewItemCollisionClass && OwnedActorComp->GetClass()->IsChildOf(NewItemCollisionClass)
-			&& OwnedActorComp->GetName().StartsWith(TEXT("ItemCollision")))
-		{
-			if (UShapeComponent* NewItemCollision = Cast<UShapeComponent>(OwnedActorComp))
-			{
-				ItemCollision = NewItemCollision;
-				if (OldItemCollisionChildren.Num() > 0)
-				{
-					for (USceneComponent* Child : OldItemCollisionChildren)
-					{
-						if (IsValid(Child))
-						{
-							if (HasAnyFlags(RF_ClassDefaultObject))
-							{
-								Child->SetupAttachment(ItemCollision);
-							}
-							else
-							{
-								Child->AttachToComponent(ItemCollision,
-								                         FAttachmentTransformRules::KeepRelativeTransform);
-							}
-						}
-					}
-				}
-			}
-		}
-		else if (NewItemMeshClass && OwnedActorComp->GetClass()->IsChildOf(NewItemMeshClass)
-			&& OwnedActorComp->GetName().StartsWith(TEXT("ItemMesh")))
-		{
-			if (UMeshComponent* NewItemMesh = Cast<UMeshComponent>(OwnedActorComp))
-			{
-				ItemMesh = NewItemMesh;
-				if (OldItemMeshChildren.Num() > 0)
-				{
-					for (USceneComponent* Child : OldItemMeshChildren)
-					{
-						if (IsValid(Child))
-						{
-							if (HasAnyFlags(RF_ClassDefaultObject))
-							{
-								Child->SetupAttachment(ItemMesh);
-							}
-							else
-							{
-								Child->AttachToComponent(ItemMesh,
-									FAttachmentTransformRules::KeepRelativeTransform);
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-	OldItemCollisionChildren.Empty();
-	OldItemMeshChildren.Empty();
-	
 	// 부모, 자식에서 Property로 설정된 컴포넌트들을 조회
 	// 최종적으로 프로퍼티에 남은 컴포넌트 주소들을 확인
-	TSet<UActorComponent*> SubObjsActorComponents;
-	for ( TFieldIterator<FObjectProperty> It ( GetClass() ); It; ++It )
+	TSet<UActorComponent*> ItemActorSubobjects;
+	for (TFieldIterator<FObjectProperty> It (GetClass()); It; ++It)
 	{
-		if ( It->PropertyClass->IsChildOf( UActorComponent::StaticClass() ) )
+		if (It->PropertyClass->IsChildOf(UActorComponent::StaticClass()))
 		{
-			if ( UActorComponent* Component = Cast<UActorComponent>( It->GetObjectPropertyValue_InContainer( this ) ) )
+			if (UActorComponent* Component = Cast<UActorComponent>(It->GetObjectPropertyValue_InContainer(this)))
 			{
-				SubObjsActorComponents.Add( Component );
+				ItemActorSubobjects.Add(Component);
 			}
 		}
 	}
-	// 마지막으로 등록된 컴포넌트들을 순회하면서 프로퍼티에 없는 컴포넌트들을 삭제
-	for (UActorComponent* OwnedComponent : GetComponents().Array())
+	//if (ItemActorSubobjects.Num() != GetComponents().Num())
 	{
-		if (USceneComponent* OwnedSceneComp = Cast<USceneComponent>(OwnedComponent))
+		for (UActorComponent* OwnedActorComp : GetComponents().Array())
 		{
-			if (SubObjsActorComponents.Contains( OwnedComponent ))
+			if (!IsValid(OwnedActorComp)) continue;
+			if (USceneComponent* OwnedSceneComp = Cast<USceneComponent>(OwnedActorComp))
 			{
-				if (OwnedSceneComp != GetRootComponent())
+				if (ItemActorSubobjects.Contains(OwnedActorComp))
 				{
-					if (ItemCollision && OwnedSceneComp != ItemCollision && OwnedSceneComp->GetAttachParent()
-						&& OwnedSceneComp->GetAttachParent()->GetName().StartsWith(TEXT("ItemCollision")))
+					if (OwnedSceneComp != GetRootComponent()
+						&& OwnedSceneComp->GetAttachChildren().Num() > 0)
 					{
-						if (HasAnyFlags(RF_ClassDefaultObject))
+						TArray<USceneComponent*> SubobjChildren = OwnedSceneComp->GetAttachChildren();
+						for (USceneComponent* Child : SubobjChildren)
 						{
-							OwnedSceneComp->SetupAttachment(ItemCollision);
-						}
-						else
-						{
-							OwnedSceneComp->AttachToComponent(ItemCollision,FAttachmentTransformRules::KeepRelativeTransform);
-						}
-					}
-					if (ItemMesh && OwnedSceneComp != ItemMesh && OwnedSceneComp->GetAttachParent()
-						&& OwnedSceneComp->GetAttachParent()->GetName().StartsWith(TEXT("ItemMesh")))
-					{
-						if (HasAnyFlags(RF_ClassDefaultObject))
-						{
-							OwnedSceneComp->SetupAttachment(ItemMesh);
-						}
-						else
-						{
-							OwnedSceneComp->AttachToComponent(ItemMesh,FAttachmentTransformRules::KeepRelativeTransform);
+							if (!IsValid(Child)) continue;
+					
+							if (Child->GetAttachParent() != OwnedSceneComp)
+							{
+								Child->AttachToComponent(OwnedSceneComp
+									, FAttachmentTransformRules::KeepRelativeTransform
+									, Child->GetAttachSocketName());
+							}
 						}
 					}
 				}
-				continue;
-			}
-			TArray<USceneComponent*> AttachedChildren = OwnedSceneComp->GetAttachChildren();
-			for (USceneComponent* Child : AttachedChildren)
-			{
-				if (IsValid(Child))
+				else
 				{
-					Child->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
+					OwnedSceneComp->ClearFlags(RF_Standalone | RF_Public);
+					OwnedSceneComp->DestroyComponent();
+					RemoveInstanceComponent(OwnedSceneComp);
 				}
 			}
-			AttachedChildren.Empty();
-			OwnedSceneComp->ClearFlags(RF_Standalone | RF_Public);
-			OwnedSceneComp->DestroyComponent();
-			RemoveInstanceComponent(OwnedSceneComp);
 		}
 	}
+	MarkPackageDirty();
 }
 
 void ANAItemActor::OnConstruction(const FTransform& Transform)
 {
  	Super::OnConstruction(Transform);
-
+	ReconstructItemSubobjectsFromMetaData();
+	
     // CDO 또는 Child Actor인 경우: 새로운 아이템 데이터 인스턴스 생성 안함
     if (!HasAnyFlags(RF_ClassDefaultObject) && ItemDataID.IsNone()
 	    && !GetWorld()->IsPreviewWorld() && !IsChildActor())
@@ -717,7 +793,6 @@ void ANAItemActor::OnConstruction(const FTransform& Transform)
 
 	const EItemSubobjDirtyFlags DirtyFlags = GetDirtySubobjectFlags(MetaData);
    
-	ReconstructItemSubobjectsFromMetaData();
 	if (MetaData->CollisionShape != EItemCollisionShape::ICS_None)
 	{
 		if (USphereComponent* SphereCollision = Cast<USphereComponent>(ItemCollision))

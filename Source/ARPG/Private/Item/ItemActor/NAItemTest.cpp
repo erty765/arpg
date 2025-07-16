@@ -19,6 +19,36 @@ ANAItemTest::ANAItemTest(const FObjectInitializer& ObjectInitializer)
 	}
 }
 
+void ANAItemTest::PostInitProperties()
+{
+	Super::PostInitProperties();
+}
+
+void ANAItemTest::PostLoad()
+{
+	Super::PostLoad();
+}
+
+void ANAItemTest::PreRegisterAllComponents()
+{
+	Super::PreRegisterAllComponents();
+}
+
+void ANAItemTest::PostRegisterAllComponents()
+{
+	Super::PostRegisterAllComponents();
+}
+
+void ANAItemTest::PostActorCreated()
+{
+	Super::PostActorCreated();
+}
+
+void ANAItemTest::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+}
+
 // Called when the game starts or when spawned
 void ANAItemTest::BeginPlay()
 {

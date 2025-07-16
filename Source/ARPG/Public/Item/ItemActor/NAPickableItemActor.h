@@ -38,9 +38,7 @@ class ARPG_API ANAPickableItemActor : public ANAItemActor
 public:
 	ANAPickableItemActor(const FObjectInitializer& ObjectInitializer);
 	
-	virtual void PostRegisterAllComponents() override;
 	virtual void OnConstruction(const FTransform& Transform) override;
-	virtual void PostInitializeComponents() override;
 
 protected:
 	virtual void BeginPlay() override;

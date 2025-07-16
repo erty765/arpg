@@ -2,26 +2,15 @@
 
 #include "Components/SphereComponent.h"
 #include "Interaction/NAInteractionComponent.h"
-#include "Item/ItemWidget/NAItemWidgetComponent.h"
 
 ANAPickableItemActor::ANAPickableItemActor(const FObjectInitializer& ObjectInitializer)
 	:Super(ObjectInitializer)
 {
 }
 
-void ANAPickableItemActor::PostRegisterAllComponents()
-{
-	Super::PostRegisterAllComponents();
-}
-
 void ANAPickableItemActor::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
-}
-
-void ANAPickableItemActor::PostInitializeComponents()
-{
-	Super::PostInitializeComponents();
 }
 
 void ANAPickableItemActor::BeginPlay()

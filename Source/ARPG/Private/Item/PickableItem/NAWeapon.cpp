@@ -118,17 +118,6 @@ void ANAWeapon::OnConstruction( const FTransform& Transform )
 	}
 }
 
-void ANAWeapon::ReplaceRootWithItemCollisionIfNeeded()
-{
-	Super::ReplaceRootWithItemCollisionIfNeeded();
-
-	// if ( ItemMesh )
-	// {
-	// 	AmmoIndicatorComponent->AttachToComponent( ItemMesh, FAttachmentTransformRules::KeepRelativeTransform, TEXT("Indicator") );
-	// 	MuzzleFlashComponent->AttachToComponent( ItemMesh, FAttachmentTransformRules::KeepRelativeTransform, TEXT( "Muzzle" ) );
-	// }
-}
-
 // Called every frame
 void ANAWeapon::Tick( float DeltaTime )
 {

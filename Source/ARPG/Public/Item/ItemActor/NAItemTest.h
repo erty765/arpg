@@ -14,6 +14,12 @@ class ARPG_API ANAItemTest : public ANAPickableItemActor
 public:
 	// Sets default values for this actor's properties
 	ANAItemTest(const FObjectInitializer& ObjectInitializer);
+	virtual void PostInitProperties() override;
+	virtual void PostLoad() override;
+	virtual void PreRegisterAllComponents() override;
+	virtual void PostRegisterAllComponents() override;
+	virtual void PostActorCreated() override;
+	virtual void OnConstruction(const FTransform& Transform) override;
 
 protected:
 	// Called when the game starts or when spawned

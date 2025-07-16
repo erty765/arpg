@@ -59,8 +59,6 @@ protected:
 
 	virtual void OnConstruction(const FTransform& Transform) override;
 
-	virtual void ReplaceRootWithItemCollisionIfNeeded() override;
-
 public:
 	// Called every frame
 	virtual void Tick( float DeltaTime ) override;
