@@ -89,7 +89,7 @@ public:
       if (!IsSoftItemMetaDataInitialized()) return nullptr;
        
       UClass* Key = InItemActorClass;
-#if WITH_EDITOR || WITH_EDITORONLY_DATA
+#if WITH_EDITOR
       if (UBlueprintGeneratedClass* BPClass = Cast<UBlueprintGeneratedClass>(InItemActorClass))
       {
          if (UBlueprint* BP = Cast<UBlueprint>(BPClass->ClassGeneratedBy))
@@ -164,20 +164,16 @@ public:
             false, TEXT("[%hs] 새 UNAItemData 객체 생성 실패"), __FUNCTION__);
          return nullptr;
       }
-
+      
       NewItemData->ItemMetaDataHandle = ItemMetaDTRowHandle;
-      FString NameStr;
-      NameStr += ItemMetaDTRowHandle.RowName.ToString();
-      FString CountStr = FString::FromInt(NewItemData->IDCount.GetValue());
-      FString NewItemID = NameStr + TEXT("_") + CountStr;
-      NewItemData->ID = FName(*NewItemID); 
+      NewItemData->ID = CreateItemID(ItemMetaDTRowHandle.RowName.ToString());
 
       // 3) 새로 생성한 UNAItemData 객체의 소유권을 런타임 때 아이템 데이터 추적용 Map으로 이관
       RuntimeItemDataMap.Emplace(NewItemData->ID, NewItemData);
 
       {
          UE_LOG(NAItem, Warning, TEXT("[%hs] 아이템 데이터 생성 완료. ID: %s, 관련 액터: %s"),
-            __FUNCTION__, *NewItemID, *GetNameSafe(InItemActor));
+            __FUNCTION__, *NewItemData->ID.ToString(), *GetNameSafe(InItemActor));
       }
        
       return RuntimeItemDataMap[NewItemData->ID].Get();
@@ -224,6 +220,8 @@ protected:
    FORCEINLINE bool IsSoftItemMetaDataInitialized() const {
       return bSoftMetaDataInitialized;
    }
+
+   FName CreateItemID(const FString& MetaDataRowName);
        
 private:
    // 실제 사용할 DataTable 포인터 보관
@@ -247,4 +245,7 @@ private:
    // 아이템 ID: 런타임 때 아이템 데이터 식별용
    UPROPERTY()
    TMap<FName, TObjectPtr<UNAItemData>> RuntimeItemDataMap;
+   
+   /** 객체가 생성될 때마다 ++ 하여 ID 를 뽑아 주는 원자적 카운터 */
+   static FThreadSafeCounter IDCount;
 };

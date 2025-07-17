@@ -8,10 +8,12 @@
 #include "Item/ItemActor/NAItemActor.h"
 #include "Item/ItemDataStructs/NAWeaponDataStructs.h"
 
-#if WITH_EDITOR || WITH_EDITORONLY_DATA
+#if WITH_EDITOR
 #include "Kismet2/KismetEditorUtilities.h"
 #endif
 
+// 프로그램 시작 시 0 에서 시작
+FThreadSafeCounter UNAItemEngineSubsystem::IDCount(0);
 
 // 와 이것도 정적 로드로 CDO 생김 ㅁㅊ
 UNAItemEngineSubsystem::UNAItemEngineSubsystem()
@@ -83,15 +85,16 @@ void UNAItemEngineSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 			{
 				UClass* NewItemActorClass = Pair.Key.LoadSynchronous();
 				// 블프 CDO 동적 패치 이후, 재컴파일 -> 블프 에디터 패널에 동적 패치한 내용을 반영하기 위함
-#if WITH_EDITOR || WITH_EDITORONLY_DATA
+#if WITH_EDITOR
 				if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(NewItemActorClass)))
 				{
 					FKismetEditorUtilities::CompileBlueprint(
 						BP,
 						EBlueprintCompileOptions::SkipGarbageCollection
+						// | EBlueprintCompileOptions::IsRegeneratingOnLoad
 						// | EBlueprintCompileOptions::IncludeCDOInReferenceReplacement
 						// | EBlueprintCompileOptions::SkipNewVariableDefaultsDetection
-						| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
+						 | EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
 					);
 				}
 #endif
@@ -136,7 +139,7 @@ void UNAItemEngineSubsystem::RegisterNewItemMetaData(UClass* NewItemClass, const
 		// 재검증
 		if (IsRegisteredItemMetaClass(NewItemClass))
 		{
-			UE_LOG(NAItem, Warning, TEXT("[%hs] 아이템 메타데이터에 등록되지 않은 클래스 : %s")
+			UE_LOG(NAItem, Warning, TEXT("[%hs] 아이템 메타데이터에 이미 등록된 클래스 : %s")
 				, __FUNCTION__, *GetNameSafe(NewItemClass));
 			return;
 		}
@@ -211,23 +214,14 @@ UNAItemData* UNAItemEngineSubsystem::CreateItemDataCopy(const UNAItemData* Sourc
        return nullptr;
     }
 
-    // 2) 생성자가 실행되지 않았으니, IDCount를 수동으로 증가
-    //    FThreadSafeCounter::Increment()은 증가된 신규 값을 반환
-    int32 NewNumber = UNAItemData::IDCount.Increment();
-    Duplicated->IDNumber = NewNumber;
+    // 2) ID를 “RowName + NewNumber” 형태로 다시 세팅
+    Duplicated->ID = CreateItemID(Duplicated->ItemMetaDataHandle.RowName.ToString());
 
-    // 3) ID를 “RowName + NewNumber” 형태로 다시 세팅
-    FString NameStr;
-    NameStr = Duplicated->ItemMetaDataHandle.RowName.ToString();
-    FString CountStr = FString::FromInt(Duplicated->IDNumber);
-    FString NewItemID = NameStr + TEXT("_") + CountStr;
-
-    Duplicated->ID = FName(*NewItemID);
-
-    // 4) 새로 생성한 UNAItemData 객체의 소유권을 런타임 때 아이템 데이터 추적용 Map으로 이관
+    // 3) 새로 생성한 UNAItemData 객체의 소유권을 런타임 때 아이템 데이터 추적용 Map으로 이관
     RuntimeItemDataMap.Emplace(Duplicated->ID, Duplicated);
 
-    UE_LOG(NAItem, Warning, TEXT("[%hs] 아이템 데이터 복제 완료. 새 ID: %s, 원본 ID: %s"), __FUNCTION__, *NewItemID, *SourceItemData->ID.ToString());
+    UE_LOG(NAItem, Warning, TEXT("[%hs] 아이템 데이터 복제 완료. 새 ID: %s, 원본 ID: %s"), __FUNCTION__
+    	, *Duplicated->ID.ToString(), *SourceItemData->ID.ToString());
     
     return RuntimeItemDataMap[Duplicated->ID].Get();
 }
@@ -261,17 +255,14 @@ UNAItemData* UNAItemEngineSubsystem::CreateItemDataBySlot(UWorld* InWorld, const
        }
        
        NewItemData->ItemMetaDataHandle = ItemMetaDTRowHandle;
-       FString NameStr    = ItemMetaDTRowHandle.RowName.ToString();
-       FString CountStr   = FString::FromInt(NewItemData->IDCount.GetValue());
-       FString NewItemID  = NameStr + TEXT("_") + CountStr;
-       
-       NewItemData->ID = FName(*NewItemID);
+       NewItemData->ID = CreateItemID(ItemMetaDTRowHandle.RowName.ToString());
        NewItemData->ItemState = static_cast<EItemState>(InInventorySlot.ItemState);
 
        // 3) 새로 생성한 UNAItemData 객체의 소유권을 런타임 때 아이템 데이터 추적용 Map으로 이관
        RuntimeItemDataMap.Emplace(NewItemData->ID, NewItemData);
 
-       UE_LOG(NAItem, Warning, TEXT("[%hs] 슬롯 데이터로 아이템 데이터 생성 완료. ID: %s"), __FUNCTION__, *NewItemID);
+       UE_LOG(NAItem, Warning, TEXT("[%hs] 슬롯 데이터로 아이템 데이터 생성 완료. ID: %s")
+       	, __FUNCTION__, *NewItemData->ID.ToString());
        
        return RuntimeItemDataMap[NewItemData->ID];
     }
@@ -314,3 +305,12 @@ bool UNAItemEngineSubsystem::DestroyRuntimeItemData(UNAItemData* InItemData, con
 {
     return DestroyRuntimeItemData(InItemData->ID, bDestroyItemActor);
 }
+
+FName UNAItemEngineSubsystem::CreateItemID(const FString& MetaDataRowName)
+{
+	IDCount.Increment();
+	FString NewNumber = FString::FromInt(IDCount.GetValue());
+	FString NewID = MetaDataRowName + TEXT("_") + NewNumber;
+	return FName(*NewID);
+}
+

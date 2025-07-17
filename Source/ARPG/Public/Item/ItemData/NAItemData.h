@@ -97,13 +97,9 @@ public:
 	bool IsCurrencyItem() const;
 	
 private:
-	UPROPERTY(DuplicateTransient,
+	UPROPERTY(Transient, DuplicateTransient,
 		VisibleAnywhere, BlueprintReadOnly, Category = "Item Data", meta=(AllowPrivateAccess = "true"))
 	FName ID = NAME_None;  // 아이템 ID (DT 행 이름 + 숫자)
-
-	/** 객체가 생성될 때마다 ++ 하여 ID 를 뽑아 주는 원자적 카운터 */
-	static FThreadSafeCounter IDCount;
-	int32 IDNumber = -1;
 
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Item Data", meta = (UIMin = 1, UIMax = 100))

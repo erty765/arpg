@@ -155,8 +155,9 @@ protected:
 	 * 메타데이터 기준에 더 이상 부합하지 않는 불필요한 컴포넌트는 제거.
 	 */
 	virtual void ReconstructItemSubobjectsFromMetaData();
+
 	
-#if WITH_EDITOR || WITH_EDITORONLY_DATA
+#if WITH_EDITOR
 	virtual void UpdateItemMetaData();
 	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
 	virtual void PostEditChangeChainProperty(struct FPropertyChangedChainEvent& PropertyChangedEvent) override;
@@ -164,15 +165,12 @@ protected:
 #endif
 	
 private:
-	void InitItemSubobjectsAttachment();
 	void InitItemSubobjectsProperties();
 	void InitItemData();
 	void VerifyInteractableData();
 	void InitCheckIfChildActor();
 
 protected:
-	static bool bShouldDoLazyCompile;
-	
 	// Optional Subobject
 	uint8 bNeedItemCollision :1 = true;
 	
@@ -206,9 +204,6 @@ protected:
 private:
 	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "Item Actor", meta = (AllowPrivateAccess = "true"))
 	FName ItemDataID;
-	
-	uint8 bInitItemSubobjectsAttachment : 1 = false;
-	uint8 bInitItemSubobjectsProperties : 1 = false;
 	
 //======================================================================================================================
 // Interactable Interface Implements

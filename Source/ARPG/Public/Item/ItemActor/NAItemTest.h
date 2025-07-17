@@ -31,5 +31,5 @@ public:
 
 protected:
 	UPROPERTY(VisibleAnywhere)
-	class UArrowComponent* TestArrowComponent;
+	UStaticMeshComponent* TestStaticMeshComponent;
 };

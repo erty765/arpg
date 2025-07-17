@@ -1,20 +1,13 @@
 #include "Item/ItemData/NAItemData.h"
 
-#include "AbilitySystemInterface.h"
 #include "Item/ItemActor/NAItemActor.h"
 #include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
 
 #include "Inventory/Component/NAInventoryComponent.h"
 #include "Item/NAItemUseInterface.h"
 
-// 프로그램 시작 시 0 에서 시작
-FThreadSafeCounter UNAItemData::IDCount(0);
-
 UNAItemData::UNAItemData()
 {
-	if (!HasAnyFlags(RF_ClassDefaultObject)) {
-		IDNumber = IDCount.Increment();
-	}
 	ID = NAME_None;
 }
 

@@ -1,13 +1,10 @@
 
 #include "Item/ItemActor/NAItemActor.h"
 
-#include "FileHelpers.h"
 #include "NACharacter.h"
 #include "Components/SphereComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
-#include "Engine/SCS_Node.h"
-#include "Engine/SimpleConstructionScript.h"
 #include "Interaction/NAInteractionComponent.h"
 #include "GeometryCollection/GeometryCollectionObject.h"
 #include "Item/ItemWidget/NAItemWidgetComponent.h"
@@ -15,11 +12,12 @@
 #include "Item/ItemWidget/NAItemWidget.h"
 #include "Misc/NALogCategory.h"
 
-#if WITH_EDITOR || WITH_EDITORONLY_DATA
+#if WITH_EDITOR
+#include "Engine/SCS_Node.h"
+#include "Engine/SimpleConstructionScript.h"
+#include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #endif
-
-bool ANAItemActor::bShouldDoLazyCompile = false;
 
 ANAItemActor::ANAItemActor(const FObjectInitializer& ObjectInitializer)
 	:Super(ObjectInitializer)
@@ -89,20 +87,12 @@ ANAItemActor::ANAItemActor(const FObjectInitializer& ObjectInitializer)
 	ItemWidgetComponent
 		= CreateOptionalDefaultSubobject<UNAItemWidgetComponent>(TEXT("ItemWidgetComponent"));
 	
-	InitItemSubobjectsAttachment();
-	InitItemSubobjectsProperties();
-	
 	bAlwaysRelevant = true;
 	bReplicates = true;
 	SetReplicateMovement(true);
 	
 	ItemDataID = NAME_None;
-}
 
-void ANAItemActor::InitItemSubobjectsAttachment()
-{
-	if (!ensureAlways(GetRootComponent() != nullptr && !bInitItemSubobjectsAttachment)) return;
-	
 	if (ItemCollision)
 	{
 		ItemCollision->SetupAttachment(GetRootComponent());
@@ -119,14 +109,12 @@ void ANAItemActor::InitItemSubobjectsAttachment()
 	{
 		ItemWidgetComponent->SetupAttachment(GetRootComponent());
 	}
-
-	bInitItemSubobjectsAttachment = true;
+	
+	InitItemSubobjectsProperties();
 }
 
 void ANAItemActor::InitItemSubobjectsProperties()
 {
-	if (!ensureAlways(!bInitItemSubobjectsProperties)) return;
-	
 	// 콜리전, 피직스 등등 설정 여기에
 	if (ItemCollision)
 	{
@@ -165,8 +153,6 @@ void ANAItemActor::InitItemSubobjectsProperties()
 		ItemWidgetComponent->SetVisibility(false);
 		ItemWidgetComponent->Deactivate();
 	}
-
-	bInitItemSubobjectsProperties = true;
 }
 
 void ANAItemActor::PostInitProperties()
@@ -383,7 +369,7 @@ void ANAItemActor::ReplaceRootWithItemCollisionIfNeeded()
 	ItemCollision->SetWorldTransform(PreviousTransform);
 }
 
-#if WITH_EDITOR || WITH_EDITORONLY_DATA
+#if WITH_EDITOR
 void ANAItemActor::UpdateItemMetaData()
 {
 	if (!UNAItemEngineSubsystem::Get()
@@ -432,13 +418,13 @@ void ANAItemActor::UpdateItemMetaData()
 void ANAItemActor::PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent)
 {
 	Super::PostEditChangeProperty(PropertyChangedEvent);
-	UpdateItemMetaData();
+	//UpdateItemMetaData();
 }
 
 void ANAItemActor::PostEditChangeChainProperty(struct FPropertyChangedChainEvent& PropertyChangedEvent)
 {
 	Super::PostEditChangeChainProperty(PropertyChangedEvent);
-	UpdateItemMetaData();
+	//UpdateItemMetaData();
 }
 
 void ANAItemActor::PostCDOCompiled(const FPostCDOCompiledContext& Context)
@@ -451,9 +437,15 @@ void ANAItemActor::PostCDOCompiled(const FPostCDOCompiledContext& Context)
 
 void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 {
+	if (HasActorBegunPlay())
+	{
+		UE_LOG(NAItem, Warning, TEXT("[%hs] BeginPlay 이후에 호출되면 안됨."), __FUNCTION__);
+		return;
+	}
+	
 	if (!UNAItemEngineSubsystem::Get()
 	|| !UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized()
-#if WITH_EDITOR || WITH_EDITORONLY_DATA
+#if WITH_EDITOR
 	|| !UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(GetClass())
 #endif
 	) return;
@@ -462,7 +454,6 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 		= UNAItemEngineSubsystem::Get()->GetItemMetaDataByClass(GetClass());
 	if (!MetaData) return;
 
-	Modify();
 	const EItemSubobjDirtyFlags DirtyFlags = GetDirtySubobjectFlags(MetaData);
 	if (EnumHasAnyFlags(DirtyFlags,
 		EItemSubobjDirtyFlags::ISDF_CollisionShape | EItemSubobjDirtyFlags::ISDF_MeshType))
@@ -480,14 +471,8 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 				}
 			}
 		}
-		struct FNASubobjectAttachInfo
-		{
-			USceneComponent* Subobject;
-			FName AttachSocketName;
-		};
 
 		UClass* NewItemCollisionClass = nullptr;
-		TArray<FNASubobjectAttachInfo> OldItemCollisionChildren;
 		if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionShape))
 		{
 			switch (MetaData->CollisionShape)
@@ -505,56 +490,16 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 				break;
 			}
 		
-			if (NewItemCollisionClass && ItemCollision)
+			if (NewItemCollisionClass && ItemCollision
+				&& ItemCollision->GetClass() != NewItemCollisionClass)
 			{
-				if (HasAnyFlags(RF_ClassDefaultObject))
-				{
-					for (UActorComponent* OwnedActorComp : GetComponents().Array())
-					{
-						if (OwnedActorComp == GetRootComponent()) continue;
-						if (USceneComponent* OwnedSceneComp = Cast<USceneComponent>(OwnedActorComp))
-						{
-							if (OwnedSceneComp->GetAttachParent() == ItemCollision)
-							{
-								FNASubobjectAttachInfo AttachInfo;
-								AttachInfo.Subobject = OwnedSceneComp;
-								AttachInfo.AttachSocketName = OwnedSceneComp->GetAttachSocketName();
-								OldItemCollisionChildren.Add(AttachInfo);
-								OwnedSceneComp->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
-							}
-						}
-					}
-				}
-				else
-				{
-					if (ItemCollision->GetAttachChildren().Num() > 0)
-					{
-						TArray<USceneComponent*> OldAttachChildren = ItemCollision->GetAttachChildren();
-						for (USceneComponent* AttachChild : OldAttachChildren)
-						{
-							if (IsValid(AttachChild))
-							{
-								FNASubobjectAttachInfo AttachInfo;
-								AttachInfo.Subobject = AttachChild;
-								AttachInfo.AttachSocketName = AttachChild->GetAttachSocketName();
-								OldItemCollisionChildren.Add(AttachInfo);
-								AttachChild->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
-							}
-						}
-					}
-				}
-
-				if (ItemCollision->GetClass() != NewItemCollisionClass)
-				{
-					ItemCollision->ClearFlags(RF_Standalone | RF_Public);
-					ItemCollision->DestroyComponent();
-					RemoveInstanceComponent(ItemCollision);
-				}
+				ItemCollision->ClearFlags(RF_Standalone | RF_Public);
+				ItemCollision->DestroyComponent();
+				RemoveInstanceComponent(ItemCollision);
 			}
 		}
 
 		UClass* NewItemMeshClass = nullptr;
-		TArray<FNASubobjectAttachInfo> OldItemMeshChildren;
 		if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_MeshType))
 		{
 			switch (MetaData->MeshType)
@@ -568,51 +513,12 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 			default:
 				break;
 			}
-			if (NewItemMeshClass && ItemMesh)
+			if (NewItemMeshClass && ItemMesh
+				&& ItemMesh->GetClass() != NewItemMeshClass)
 			{
-				if (HasAnyFlags(RF_ClassDefaultObject))
-				{
-					for (UActorComponent* OwnedActorComp : GetComponents().Array())
-					{
-						if (OwnedActorComp == GetRootComponent()) continue;
-						if (USceneComponent* OwnedSceneComp = Cast<USceneComponent>(OwnedActorComp))
-						{
-							if (OwnedSceneComp->GetAttachParent() == ItemMesh)
-							{
-								FNASubobjectAttachInfo AttachInfo;
-								AttachInfo.Subobject = OwnedSceneComp;
-								AttachInfo.AttachSocketName = OwnedSceneComp->GetAttachSocketName();
-								OldItemMeshChildren.Add(AttachInfo);
-								OwnedSceneComp->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
-							}
-						}
-					}
-				}
-				else
-				{
-					if (ItemMesh->GetAttachChildren().Num() > 0)
-					{
-						TArray<USceneComponent*> OldAttachChildren = ItemMesh->GetAttachChildren();
-						for (USceneComponent* AttachChild : OldAttachChildren)
-						{
-							if (IsValid(AttachChild))
-							{
-								FNASubobjectAttachInfo AttachInfo;
-								AttachInfo.Subobject = AttachChild;
-								AttachInfo.AttachSocketName = AttachChild->GetAttachSocketName();
-								OldItemMeshChildren.Add(AttachInfo);
-								AttachChild->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
-							}
-						}
-					}
-				}
-			
-				if (ItemMesh->GetClass() != NewItemMeshClass)
-				{
-					ItemMesh->ClearFlags(RF_Standalone | RF_Public);
-					ItemMesh->DestroyComponent();
-					RemoveInstanceComponent(ItemMesh);
-				}
+				ItemMesh->ClearFlags(RF_Standalone | RF_Public);
+				ItemMesh->DestroyComponent();
+				RemoveInstanceComponent(ItemMesh);
 			}
 		}
 
@@ -629,26 +535,6 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 				if (UShapeComponent* NewItemCollision = Cast<UShapeComponent>(OwnedActorComp))
 				{
 					ItemCollision = NewItemCollision;
-					if (OldItemCollisionChildren.Num() > 0)
-					{
-						for (FNASubobjectAttachInfo ItemCollisionChild : OldItemCollisionChildren)
-						{
-							if (IsValid(ItemCollisionChild.Subobject))
-							{
-								if (HasAnyFlags(RF_ClassDefaultObject))
-								{
-									ItemCollisionChild.Subobject->SetupAttachment(ItemCollision
-										, ItemCollisionChild.AttachSocketName);
-								}
-								else
-								{
-									ItemCollisionChild.Subobject->AttachToComponent(ItemCollision
-										, FAttachmentTransformRules::KeepRelativeTransform
-										, ItemCollisionChild.AttachSocketName);
-								}
-							}
-						}
-					}
 				}
 			}
 			else if (NewItemMeshClass
@@ -658,33 +544,11 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 				if (UMeshComponent* NewItemMesh = Cast<UMeshComponent>(OwnedActorComp))
 				{
 					ItemMesh = NewItemMesh;
-					if (OldItemMeshChildren.Num() > 0)
-					{
-						for (FNASubobjectAttachInfo ItemMeshChild : OldItemMeshChildren)
-						{
-							if (IsValid(ItemMeshChild.Subobject))
-							{
-								if (HasAnyFlags(RF_ClassDefaultObject))
-								{
-									ItemMeshChild.Subobject->SetupAttachment(ItemMesh
-										, ItemMeshChild.AttachSocketName);
-								}
-								else
-								{
-									ItemMeshChild.Subobject->AttachToComponent(ItemMesh
-										, FAttachmentTransformRules::KeepRelativeTransform
-										, ItemMeshChild.AttachSocketName);
-								}
-							}
-						}
-					}
 				}
 			}
 		}
-		OldItemCollisionChildren.Empty();
-		OldItemMeshChildren.Empty();
-
-#if WITH_EDITOR || WITH_EDITORONLY_DATA
+		
+#if WITH_EDITOR
 		if (UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(GetClass()))
 		{
 			TArray<USCS_Node*> SCSNodes =  BPGC->SimpleConstructionScript->GetAllNodes();
@@ -713,9 +577,23 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 				}
 			}
 		}
+
+		if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
+		{
+			if (!BP->IsPossiblyDirty())
+			{
+				FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
+				FKismetEditorUtilities::CompileBlueprint(
+					BP,
+					EBlueprintCompileOptions::SkipSave
+					| EBlueprintCompileOptions::SkipGarbageCollection
+					| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
+				);
+			}
+		}
 #endif
 	}
-
+	
 	// 부모, 자식에서 Property로 설정된 컴포넌트들을 조회
 	// 최종적으로 프로퍼티에 남은 컴포넌트 주소들을 확인
 	TSet<UActorComponent*> ItemActorSubobjects;
@@ -729,33 +607,14 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 			}
 		}
 	}
-	//if (ItemActorSubobjects.Num() != GetComponents().Num())
+	if (ItemActorSubobjects.Num() != GetComponents().Num())
 	{
 		for (UActorComponent* OwnedActorComp : GetComponents().Array())
 		{
 			if (!IsValid(OwnedActorComp)) continue;
 			if (USceneComponent* OwnedSceneComp = Cast<USceneComponent>(OwnedActorComp))
 			{
-				if (ItemActorSubobjects.Contains(OwnedActorComp))
-				{
-					if (OwnedSceneComp != GetRootComponent()
-						&& OwnedSceneComp->GetAttachChildren().Num() > 0)
-					{
-						TArray<USceneComponent*> SubobjChildren = OwnedSceneComp->GetAttachChildren();
-						for (USceneComponent* Child : SubobjChildren)
-						{
-							if (!IsValid(Child)) continue;
-					
-							if (Child->GetAttachParent() != OwnedSceneComp)
-							{
-								Child->AttachToComponent(OwnedSceneComp
-									, FAttachmentTransformRules::KeepRelativeTransform
-									, Child->GetAttachSocketName());
-							}
-						}
-					}
-				}
-				else
+				if (!ItemActorSubobjects.Contains(OwnedActorComp))
 				{
 					OwnedSceneComp->ClearFlags(RF_Standalone | RF_Public);
 					OwnedSceneComp->DestroyComponent();
@@ -764,12 +623,12 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 			}
 		}
 	}
-	MarkPackageDirty();
 }
 
 void ANAItemActor::OnConstruction(const FTransform& Transform)
 {
  	Super::OnConstruction(Transform);
+	
 	ReconstructItemSubobjectsFromMetaData();
 	
     // CDO 또는 Child Actor인 경우: 새로운 아이템 데이터 인스턴스 생성 안함
@@ -781,7 +640,7 @@ void ANAItemActor::OnConstruction(const FTransform& Transform)
 
     if (!UNAItemEngineSubsystem::Get()
 	    || !UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized()
-#if WITH_EDITOR || WITH_EDITORONLY_DATA
+#if WITH_EDITOR
 	    || !UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(GetClass())
 #endif
     )
@@ -793,7 +652,9 @@ void ANAItemActor::OnConstruction(const FTransform& Transform)
 
 	const EItemSubobjDirtyFlags DirtyFlags = GetDirtySubobjectFlags(MetaData);
    
-	if (MetaData->CollisionShape != EItemCollisionShape::ICS_None)
+	if (MetaData->CollisionShape != EItemCollisionShape::ICS_None
+		/*&& EnumHasAnyFlags(DirtyFlags,
+			EItemSubobjDirtyFlags::ISDF_CollisionShape | EItemSubobjDirtyFlags::ISDF_CollisionProperties)*/)
 	{
 		if (USphereComponent* SphereCollision = Cast<USphereComponent>(ItemCollision))
 		{
@@ -808,9 +669,10 @@ void ANAItemActor::OnConstruction(const FTransform& Transform)
 			CapsuleCollision->SetCapsuleSize(
 				MetaData->CollisionCapsuleSize.X, MetaData->CollisionCapsuleSize.Y);
 		}
-	
 	}
-	if (MetaData->MeshType != EItemMeshType::IMT_None)
+	if (MetaData->MeshType != EItemMeshType::IMT_None
+		/*&& EnumHasAnyFlags(DirtyFlags,
+			EItemSubobjDirtyFlags::ISDF_MeshType | EItemSubobjDirtyFlags::ISDF_MeshProperties)*/)
 	{
 		if (UStaticMeshComponent* StaticMeshComp = Cast<UStaticMeshComponent>(ItemMesh))
 		{

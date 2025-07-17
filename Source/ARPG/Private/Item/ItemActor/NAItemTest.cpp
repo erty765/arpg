@@ -12,10 +12,10 @@ ANAItemTest::ANAItemTest(const FObjectInitializer& ObjectInitializer)
 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
-	TestArrowComponent = CreateDefaultSubobject<UArrowComponent>(TEXT("TestArrow"));
+	TestStaticMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TestStaticMesh"));
 	if (ItemMesh)
 	{
-		TestArrowComponent->SetupAttachment(ItemMesh);
+		TestStaticMeshComponent->SetupAttachment(ItemMesh);
 	}
 }
 

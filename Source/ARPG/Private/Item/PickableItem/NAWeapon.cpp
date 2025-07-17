@@ -32,8 +32,8 @@ ANAWeapon::ANAWeapon() : ANAPickableItemActor(FObjectInitializer::Get())
 	AmmoIndicatorComponent->SetRelativeLocation( {0.f, 0.f, 10.f} );
 	
 	PickupMode = EPickupMode::PM_Inventory;
-
-	if ( ItemMesh )
+	
+	if (ItemMesh)
 	{
 		AmmoIndicatorComponent->SetupAttachment( ItemMesh,TEXT("Indicator") );
 		MuzzleFlashComponent->SetupAttachment( ItemMesh,TEXT( "Muzzle" ) );
