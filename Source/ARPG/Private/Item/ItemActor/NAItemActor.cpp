@@ -17,6 +17,8 @@
 #include "Engine/SimpleConstructionScript.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Serialization/ObjectReader.h"
+#include "Serialization/ObjectWriter.h"
 #endif
 
 ANAItemActor::ANAItemActor(const FObjectInitializer& ObjectInitializer)
@@ -68,6 +70,24 @@ ANAItemActor::ANAItemActor(const FObjectInitializer& ObjectInitializer)
 			default:
 				break;
 			}
+			if (ItemCollision)
+			{
+				if (USphereComponent* SphereCollision = Cast<USphereComponent>(ItemCollision))
+				{
+					SphereCollision->SetSphereRadius(MetaData->CollisionSphereRadius);
+				}
+				else if (UBoxComponent* BoxCollision = Cast<UBoxComponent>(ItemCollision))
+				{
+					BoxCollision->SetBoxExtent(MetaData->CollisionBoxExtent);
+				}
+				else if (UCapsuleComponent* CapsuleCollision = Cast<UCapsuleComponent>(ItemCollision))
+				{
+					CapsuleCollision->SetCapsuleSize(
+						MetaData->CollisionCapsuleSize.X, MetaData->CollisionCapsuleSize.Y);
+				}
+				ItemCollision->SetRelativeTransform(FTransform::Identity);
+			}
+			
 			switch (MetaData->MeshType)
 			{
 			case EItemMeshType::IMT_Static:
@@ -78,6 +98,22 @@ ANAItemActor::ANAItemActor(const FObjectInitializer& ObjectInitializer)
 				break;
 			default:
 				break;
+			}
+
+			if (ItemMesh)
+			{
+				if (UStaticMeshComponent* StaticMeshComp = Cast<UStaticMeshComponent>(ItemMesh))
+				{
+					StaticMeshComp->SetStaticMesh(MetaData->StaticMeshAssetData.StaticMesh);
+					ItemFractureCollection = MetaData->StaticMeshAssetData.FractureCollection;
+					ItemFractureCache = MetaData->StaticMeshAssetData.FractureCache;
+				}
+				else if (USkeletalMeshComponent* SkeletalMeshComp = Cast<USkeletalMeshComponent>(ItemMesh))
+				{
+					SkeletalMeshComp->SetSkeletalMesh(MetaData->SkeletalMeshAssetData.SkeletalMesh);
+					SkeletalMeshComp->SetAnimClass(MetaData->SkeletalMeshAssetData.AnimClass);
+				}
+				ItemMesh->SetRelativeTransform(MetaData->MeshTransform);
 			}
 		}
 	}
@@ -110,10 +146,10 @@ ANAItemActor::ANAItemActor(const FObjectInitializer& ObjectInitializer)
 		ItemWidgetComponent->SetupAttachment(GetRootComponent());
 	}
 	
-	InitItemSubobjectsProperties();
+	InitItemSubobjectsPhysics();
 }
 
-void ANAItemActor::InitItemSubobjectsProperties()
+void ANAItemActor::InitItemSubobjectsPhysics()
 {
 	// 콜리전, 피직스 등등 설정 여기에
 	if (ItemCollision)
@@ -269,6 +305,7 @@ EItemSubobjDirtyFlags ANAItemActor::GetDirtySubobjectFlags(
 			default:
 				break;
 			}
+			bDirtyShapeProps |= ItemCollision->GetRelativeScale3D() != MetaData->CollisionScale3D;
 		}
 		if (bDirtyShape)
 		{
@@ -319,6 +356,7 @@ EItemSubobjDirtyFlags ANAItemActor::GetDirtySubobjectFlags(
 			default:
 				break;
 			}
+			bDirtyMeshProps |= !ItemMesh->GetRelativeTransform().Equals(MetaData->MeshTransform);
 		}
 		if (bDirtyMesh)
 		{
@@ -370,6 +408,20 @@ void ANAItemActor::ReplaceRootWithItemCollisionIfNeeded()
 }
 
 #if WITH_EDITOR
+void ANAItemActor::PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+	UpdateItemMetaData();
+	SetItemSubobjectsPropsFromMetaData();
+}
+
+void ANAItemActor::PostEditChangeChainProperty(struct FPropertyChangedChainEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeChainProperty(PropertyChangedEvent);
+	UpdateItemMetaData();
+	SetItemSubobjectsPropsFromMetaData();
+}
+
 void ANAItemActor::UpdateItemMetaData()
 {
 	if (!UNAItemEngineSubsystem::Get()
@@ -381,50 +433,127 @@ void ANAItemActor::UpdateItemMetaData()
 			= UNAItemEngineSubsystem::Get()->GetItemMetaDataStructs(GetClass());
 	if (!MetaData) return;
 
-	if (ItemCollision)
+	const ANAItemActor* ItemActorCDO = Cast<ANAItemActor>(GetClass()->GetDefaultObject(false));
+	if (!ItemActorCDO) return;
+
+	if (ItemActorCDO->ItemCollision)
 	{
-		if (USphereComponent* SphereCollision = Cast<USphereComponent>(ItemCollision))
+		ItemActorCDO->ItemCollision->SetRelativeLocation(FVector::ZeroVector);
+		ItemActorCDO->ItemCollision->SetRelativeRotation(FRotator::ZeroRotator);
+	}
+	
+	const EItemSubobjDirtyFlags CDODirtyFlags = ItemActorCDO->GetDirtySubobjectFlags(MetaData);
+	if (!EnumHasAnyFlags(CDODirtyFlags
+		, EItemSubobjDirtyFlags::ISDF_CollisionProperties | EItemSubobjDirtyFlags::ISDF_MeshProperties)) return;
+	
+	if (EnumHasAnyFlags(CDODirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionProperties))
+	{
+		if (ItemActorCDO->ItemCollision)
 		{
-			MetaData->CollisionSphereRadius = SphereCollision->GetScaledSphereRadius();
-		}
-		else if (UBoxComponent* BoxCollision = Cast<UBoxComponent>(ItemCollision))
-		{
-			MetaData->CollisionBoxExtent = BoxCollision->GetScaledBoxExtent();
-		}
-		else if (UCapsuleComponent* CapsuleCollision = Cast<UCapsuleComponent>(ItemCollision))
-		{
-			MetaData->CollisionCapsuleSize.X = CapsuleCollision->GetScaledCapsuleRadius();
-			MetaData->CollisionCapsuleSize.Y = CapsuleCollision->GetScaledCapsuleHalfHeight();
+			if (USphereComponent* CDOSphereCollision = Cast<USphereComponent>(ItemActorCDO->ItemCollision))
+			{
+				if (MetaData->CollisionSphereRadius != CDOSphereCollision->GetScaledSphereRadius())
+				{
+					MetaData->CollisionSphereRadius = CDOSphereCollision->GetScaledSphereRadius();
+				}
+			}
+			else if (UBoxComponent* CDOBoxCollision = Cast<UBoxComponent>(ItemActorCDO->ItemCollision))
+			{
+				if (MetaData->CollisionBoxExtent != CDOBoxCollision->GetScaledBoxExtent())
+				{
+					MetaData->CollisionBoxExtent = CDOBoxCollision->GetScaledBoxExtent();
+				}
+			}
+			else if (UCapsuleComponent* CDOCapsuleCollision = Cast<UCapsuleComponent>(ItemActorCDO->ItemCollision))
+			{
+				if (MetaData->CollisionCapsuleSize.X != CDOCapsuleCollision->GetScaledCapsuleRadius())
+				{
+					MetaData->CollisionCapsuleSize.X = CDOCapsuleCollision->GetScaledCapsuleRadius();
+				}
+				if (MetaData->CollisionCapsuleSize.Y != CDOCapsuleCollision->GetScaledCapsuleHalfHeight())
+				{
+					MetaData->CollisionCapsuleSize.Y = CDOCapsuleCollision->GetScaledCapsuleHalfHeight();
+				}
+			}
+			if (!MetaData->CollisionScale3D.Equals(ItemActorCDO->ItemCollision->GetRelativeScale3D()))
+			{
+				MetaData->CollisionScale3D = ItemActorCDO->ItemCollision->GetRelativeScale3D();
+			}
 		}
 	}
 
-	if (ItemMesh)
+	if (EnumHasAnyFlags(CDODirtyFlags, EItemSubobjDirtyFlags::ISDF_MeshProperties))
 	{
-		if (UStaticMeshComponent* StaticMeshComp = Cast<UStaticMeshComponent>(ItemMesh))
+		if (ItemMesh)
 		{
-			MetaData->StaticMeshAssetData.StaticMesh = StaticMeshComp->GetStaticMesh();
-			MetaData->StaticMeshAssetData.FractureCollection = ItemFractureCollection;
-			MetaData->StaticMeshAssetData.FractureCache = ItemFractureCache;
+			if (UStaticMeshComponent* StaticMeshComp = Cast<UStaticMeshComponent>(ItemMesh))
+			{
+				if (MetaData->StaticMeshAssetData.StaticMesh != StaticMeshComp->GetStaticMesh())
+				{
+					MetaData->StaticMeshAssetData.StaticMesh = StaticMeshComp->GetStaticMesh();
+				}
+				if (MetaData->StaticMeshAssetData.FractureCollection != ItemFractureCollection)
+				{
+					MetaData->StaticMeshAssetData.FractureCollection = ItemFractureCollection;
+				}
+				if (MetaData->StaticMeshAssetData.FractureCache != ItemFractureCache)
+				{
+					MetaData->StaticMeshAssetData.FractureCache = ItemFractureCache;
+				}
+			}
+			else if (USkeletalMeshComponent* SkeletalMeshComp = Cast<USkeletalMeshComponent>(ItemMesh))
+			{
+				if (MetaData->SkeletalMeshAssetData.SkeletalMesh != SkeletalMeshComp->GetSkeletalMeshAsset())
+				{
+					MetaData->SkeletalMeshAssetData.SkeletalMesh = SkeletalMeshComp->GetSkeletalMeshAsset();
+				}
+				if (MetaData->SkeletalMeshAssetData.AnimClass != SkeletalMeshComp->GetAnimClass())
+				{
+					MetaData->SkeletalMeshAssetData.AnimClass = SkeletalMeshComp->GetAnimClass();
+				}
+			}
+			
+			if (!MetaData->MeshTransform.Equals(ItemMesh->GetRelativeTransform()))
+			{
+				MetaData->MeshTransform = ItemMesh->GetRelativeTransform();
+			}
 		}
-		else if (USkeletalMeshComponent* SkeletalMeshComp = Cast<USkeletalMeshComponent>(ItemMesh))
-		{
-			MetaData->SkeletalMeshAssetData.SkeletalMesh = SkeletalMeshComp->GetSkeletalMeshAsset();
-			MetaData->SkeletalMeshAssetData.AnimClass = SkeletalMeshComp->GetAnimClass();
-		}
-		MetaData->MeshTransform = ItemMesh->GetRelativeTransform();
 	}
 }
 
-void ANAItemActor::PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent)
+void ANAItemActor::SetItemSubobjectsPropsFromMetaData()
 {
-	Super::PostEditChangeProperty(PropertyChangedEvent);
-	//UpdateItemMetaData();
-}
+	if (HasAnyFlags(RF_ClassDefaultObject)) return;
 
-void ANAItemActor::PostEditChangeChainProperty(struct FPropertyChangedChainEvent& PropertyChangedEvent)
-{
-	Super::PostEditChangeChainProperty(PropertyChangedEvent);
-	//UpdateItemMetaData();
+	if (!UNAItemEngineSubsystem::Get()
+		|| !UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized()
+		|| !UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(GetClass()))
+		return;
+	
+	FNAItemBaseTableRow* MetaData
+			= UNAItemEngineSubsystem::Get()->GetItemMetaDataStructs(GetClass());
+	if (!MetaData) return;
+
+	const ANAItemActor* ItemActorCDO = Cast<ANAItemActor>(GetClass()->GetDefaultObject(false));
+	if (!ItemActorCDO) return;
+	
+	
+	if (ItemActorCDO->ItemCollision && ItemCollision)
+	{
+		// ItemCollision의 프로퍼티 복사
+		// 먼저 메모리 스트림을 생성하고
+		TArray<uint8> SavedBytes;
+		FObjectWriter Writer(ItemActorCDO->ItemCollision, SavedBytes); // CDO의 ItemCollision 내용을 SavedBytes에 쓴다.
+       
+		// 저장된 바이트를 다시 읽어서 현재 객체의 ItemCollision에 적용한다.
+		FObjectReader Reader(ItemCollision, SavedBytes); // SavedBytes 내용을 현재 ItemCollision에 읽어들인다.
+	}
+	if (ItemActorCDO->ItemMesh && ItemMesh)
+	{
+		TArray<uint8> SavedBytes;
+		FObjectWriter Writer(ItemActorCDO->ItemMesh, SavedBytes);
+		FObjectReader Reader(ItemMesh, SavedBytes);
+	}
 }
 
 void ANAItemActor::PostCDOCompiled(const FPostCDOCompiledContext& Context)
@@ -637,71 +766,6 @@ void ANAItemActor::OnConstruction(const FTransform& Transform)
     {
 	    InitItemData();
     }
-
-    if (!UNAItemEngineSubsystem::Get()
-	    || !UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized()
-#if WITH_EDITOR
-	    || !UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(GetClass())
-#endif
-    )
-	    return;
-
-    const FNAItemBaseTableRow* MetaData
-	    = UNAItemEngineSubsystem::Get()->GetItemMetaDataByClass(GetClass());
-    if (!MetaData) return;
-
-	const EItemSubobjDirtyFlags DirtyFlags = GetDirtySubobjectFlags(MetaData);
-   
-	if (MetaData->CollisionShape != EItemCollisionShape::ICS_None
-		/*&& EnumHasAnyFlags(DirtyFlags,
-			EItemSubobjDirtyFlags::ISDF_CollisionShape | EItemSubobjDirtyFlags::ISDF_CollisionProperties)*/)
-	{
-		if (USphereComponent* SphereCollision = Cast<USphereComponent>(ItemCollision))
-		{
-			SphereCollision->SetSphereRadius(MetaData->CollisionSphereRadius);
-		}
-		else if (UBoxComponent* BoxCollision = Cast<UBoxComponent>(ItemCollision))
-		{
-			BoxCollision->SetBoxExtent(MetaData->CollisionBoxExtent);
-		}
-		else if (UCapsuleComponent* CapsuleCollision = Cast<UCapsuleComponent>(ItemCollision))
-		{
-			CapsuleCollision->SetCapsuleSize(
-				MetaData->CollisionCapsuleSize.X, MetaData->CollisionCapsuleSize.Y);
-		}
-	}
-	if (MetaData->MeshType != EItemMeshType::IMT_None
-		/*&& EnumHasAnyFlags(DirtyFlags,
-			EItemSubobjDirtyFlags::ISDF_MeshType | EItemSubobjDirtyFlags::ISDF_MeshProperties)*/)
-	{
-		if (UStaticMeshComponent* StaticMeshComp = Cast<UStaticMeshComponent>(ItemMesh))
-		{
-			StaticMeshComp->SetStaticMesh(MetaData->StaticMeshAssetData.StaticMesh);
-			ItemFractureCollection = MetaData->StaticMeshAssetData.FractureCollection;
-			ItemFractureCache = MetaData->StaticMeshAssetData.FractureCache;
-		}
-		else if (USkeletalMeshComponent* SkeletalMeshComp = Cast<USkeletalMeshComponent>(ItemMesh))
-		{
-			SkeletalMeshComp->SetSkeletalMesh(MetaData->SkeletalMeshAssetData.SkeletalMesh);
-			SkeletalMeshComp->SetAnimClass(MetaData->SkeletalMeshAssetData.AnimClass);
-		}
-	}
-	
-	if (GetRootComponent())
-	{
-		GetRootComponent()->SetWorldTransform(Transform);
-	}
-	if (ItemCollision)
-	{
-		if (GetRootComponent() != ItemCollision)
-		{
-			ItemCollision->SetRelativeTransform(FTransform::Identity);
-		}
-	}
-	if (ItemMesh && !GetWorld()->IsPreviewWorld())
-	{
-		ItemMesh->SetRelativeTransform(MetaData->MeshTransform);
-	}
 }
 
 void ANAItemActor::Destroyed()
@@ -799,44 +863,6 @@ void ANAItemActor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	{
-		// if (HasAuthority())
-		// {
-		// 	// 서버에서 Owner가 없었다면 클라이언트 플레이어에게 소유권 할당
-		// 	if (!GetOwner())
-		// 	{
-		// 		if (APawn* InstigatingPawn = GetInstigator())
-		// 		{
-		// 			if (AController* InstigatingController = InstigatingPawn->GetController())
-		// 			{
-		// 				SetOwner(InstigatingController);
-		// 				UE_LOG(NAItem, Log, TEXT("[Server] %s: Set owner to Controller %s")
-		// 					, *GetName(), *InstigatingController->GetName());
-		// 			}else
-		// 			{
-		// 				UE_LOG(NAItem, Warning, TEXT("[Server] %s: Could not find controller from instigator %s"), *GetName(), *InstigatingPawn->GetName());
-		// 			}
-		// 		}
-		// 		else
-		// 		{
-		// 			UE_LOG(NAItem, Warning, TEXT("[Server] %s: No instigator found to determine owner."), *GetName());
-		// 		}
-		// 	}
-		// }
-		// else
-		// {
-		// 	// 클라이언트: Owner 정보 로그 출력 (RPC가 가능한 상태인지 확인용)
-		// 	if (AActor* MyOwner = GetOwner())
-		// 	{
-		// 		UE_LOG(NAItem, Log, TEXT("[Client] %s: Owner is %s"), *GetName(), *MyOwner->GetName());
-		// 	}
-		// 	else
-		// 	{
-		// 		UE_LOG(NAItem, Warning, TEXT("[Client] %s: No owner assigned! RPCs will fail."), *GetName());
-		// 	}
-		// }
-	}
-	
 	InitCheckIfChildActor();
 	
 	if (InteractableInterfaceRef && TriggerSphere)

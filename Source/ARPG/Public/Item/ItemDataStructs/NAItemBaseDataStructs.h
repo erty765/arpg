@@ -176,7 +176,7 @@ struct ARPG_API FNAItemBaseTableRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, Category = "Item Collision Shape",
 		meta=(EditCondition="CollisionShape!=EItemCollisionShape::ICS_None", EditConditionHides))
-	FTransform CollisionTransform = FTransform::Identity;
+	FVector CollisionScale3D = FVector::OneVector;
 	
 	/* ANAItemActor의 메쉬 타입*/
 	// None: 기본 생성자에서 DoNotCreateSubobject로 ItemMesh 생성 수정한 경우!! 반다시!! 이 플래그 써야함

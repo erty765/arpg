@@ -159,13 +159,14 @@ protected:
 	
 #if WITH_EDITOR
 	virtual void UpdateItemMetaData();
+	virtual void SetItemSubobjectsPropsFromMetaData();
 	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
 	virtual void PostEditChangeChainProperty(struct FPropertyChangedChainEvent& PropertyChangedEvent) override;
 	virtual void PostCDOCompiled(const FPostCDOCompiledContext& Context) override;
 #endif
 	
 private:
-	void InitItemSubobjectsProperties();
+	void InitItemSubobjectsPhysics();
 	void InitItemData();
 	void VerifyInteractableData();
 	void InitCheckIfChildActor();
@@ -183,10 +184,10 @@ protected:
 	UPROPERTY(Transient, NonTransactional, VisibleAnywhere, BlueprintReadOnly, Category="ItemActor")
 	USceneComponent* StubRootComponent;
 	
-	UPROPERTY(Transient,/* Instanced,*/ NonTransactional, VisibleAnywhere, BlueprintReadOnly, Category="Item Actor | Collision Shape")
+	UPROPERTY(Transient, NonTransactional, VisibleAnywhere, BlueprintReadOnly, Category="Item Actor | Collision Shape")
 	UShapeComponent* ItemCollision;
 
-	UPROPERTY(Transient,/* Instanced,*/ NonTransactional, VisibleAnywhere, Category = "Item Actor | Mesh")
+	UPROPERTY(Transient, NonTransactional, VisibleAnywhere, Category = "Item Actor | Mesh")
 	UMeshComponent* ItemMesh;
 
 	UPROPERTY(VisibleAnywhere, Category = "Item Actor | Static Mesh")
