@@ -1,3 +1,6 @@
+## 언리얼 프로퍼티 지정자 도큐멘트
+https://unreal-garden.com/docs/uproperty/
+
 [Main Issue]  상호작용 기능 | 인벤토리 기능 & 아이템 활용 기능 & 아이템 DT 관리 | 무기(attack, fire, reload) 기능
 
 [05/13]
@@ -626,3 +629,28 @@ ANAItemActor::PostEditChangeProperty->AActor::RerunConstructionScripts->AActor::
 		// 		UE_LOG(NAItem, Warning, TEXT("[Client] %s: No owner assigned! RPCs will fail."), *GetName());
 		// 	}
 		// }
+
+[07/18]
+◎ 동적 초기화 서브오브젝트(ItemCollision | ItemMesh)에 Trasient나 Instanced 지정자 없어도 계층구조 삑사리 안나고 잘 생성됨
+왜...?
+◎ ChildActor로 어태치된 경우, 다음과 같은 경고가 뜸:
+PIE: Warning: 유효하지 않은 시뮬레이션 옵션: (BP_PlasmaRifle0.ItemCollision(Box)) 바디가 피직스 시뮬레이션을 하도록 설정되어 있으나 활성화된 콜리전이 호환되지 않습니다.
+ChildActor로서 생성된 경우 아이템 콜리전의 피직스 시뮬레이션 설정이 제대로 안꺼져서 생기는 듯함.
+해결:
+ItemCollision->SetSimulatePhysics(false);
+			ItemCollision->SetGenerateOverlapEvents( false );
+			ItemCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			ItemCollision->SetCollisionProfileName(TEXT("NoCollision"));
+			ItemCollision->Deactivate();
+Deactivate를 추가하여 피직스 시뮬레이션을 완전히 차단
+◎ 블프 에디터 켰을때 ItemCollision과 ItemMesh의 계층트리 노드 이름이
+ex) 'ItemCollision(Box)'와 'ItemMesh(Static)'으로 뜨는 오류 (Item Collision(ItemCollision(Box)), Item Mesh(ItemMesh(Static))으로 떠야 함)
+블프 에디터 켠 뒤 -> 풀 블프 에디터 열기 -> 컴파일 버튼 누르기 까지 해야 노드 이름이 제대로 반영됨
+블프 에디터에서 ItemCollision이나 ItemMesh의 프로퍼티를 편집한 값이 직렬화는 되는 것 같은데, 문제는 블프 에셋 로드 때 네이티브 클래스의 코드로 만들어진 서브오브젝트를 래핑하는 노드를 만드는 과정에서 이름이 변경되기 때문에 직렬화된 프로퍼티가 제대로 적용되지 않음.
+└ 블프 에디터를 처음 열 때부터, 노드의 이름이 제대로 박혀있어야 함. 아이템 엔진 서브시스템에서 재컴파일 하기 직전에 노드 이름 수정해보자
+◎ UPROPERTY(Transient): 포인터 자체만 디스크 직렬화를 방지. 이 지정자가 만약 UObject에 있었다면 이 UObject의 프로퍼티들을 직렬화 대상임.
+◎ 네이티브 생성자에서 CreateDefaultSubobject 함수로 생성된 서브오브젝트 객체들(UPROPERTY 붙인)은 블프 패키지 직렬화 대상에 무조건 포함됨.
+
+언리얼은 진짜 다 계획이 있구나(negative)
+
+◎ 트랜스폼 정보는 항상 날라감. 이것만 메타데이터에서 끌어오기
