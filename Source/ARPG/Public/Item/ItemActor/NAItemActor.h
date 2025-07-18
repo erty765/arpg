@@ -155,14 +155,13 @@ protected:
 	 * 메타데이터 기준에 더 이상 부합하지 않는 불필요한 컴포넌트는 제거.
 	 */
 	virtual void ReconstructItemSubobjectsFromMetaData();
-
 	
 #if WITH_EDITOR
-	virtual void UpdateItemMetaData();
-	virtual void SetItemSubobjectsPropsFromMetaData();
 	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
 	virtual void PostEditChangeChainProperty(struct FPropertyChangedChainEvent& PropertyChangedEvent) override;
 	virtual void PostCDOCompiled(const FPostCDOCompiledContext& Context) override;
+	
+	virtual void BackupItemSubobjectsProperties();
 #endif
 	
 private:
@@ -181,13 +180,13 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Replicated, Category="Item Actor")
 	uint8 bWasChildActor : 1 = false;
 	
-	UPROPERTY(Transient, NonTransactional, VisibleAnywhere, BlueprintReadOnly, Category="ItemActor")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ItemActor")
 	USceneComponent* StubRootComponent;
 	
-	UPROPERTY(Transient, NonTransactional, VisibleAnywhere, BlueprintReadOnly, Category="Item Actor | Collision Shape")
+	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category="Item Actor | Collision Shape")
 	UShapeComponent* ItemCollision;
 
-	UPROPERTY(Transient, NonTransactional, VisibleAnywhere, Category = "Item Actor | Mesh")
+	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "Item Actor | Mesh")
 	UMeshComponent* ItemMesh;
 
 	UPROPERTY(VisibleAnywhere, Category = "Item Actor | Static Mesh")

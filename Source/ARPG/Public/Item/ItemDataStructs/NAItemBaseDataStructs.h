@@ -162,7 +162,7 @@ struct ARPG_API FNAItemBaseTableRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, Category = "Item Collision Shape")
 	EItemCollisionShape CollisionShape = EItemCollisionShape::ICS_None;
 	
-	UPROPERTY(EditAnywhere, Category = "Item Collision Shape",
+	/*UPROPERTY(EditAnywhere, Category = "Item Collision Shape",
 		meta=(EditCondition="CollisionShape==EItemCollisionShape::ICS_Sphere", EditConditionHides,ClampMin= "0.0"))
 	float CollisionSphereRadius = 0.f;
 
@@ -172,9 +172,9 @@ struct ARPG_API FNAItemBaseTableRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, Category = "Item Collision Shape",
 			meta=(EditCondition="CollisionShape==EItemCollisionShape::ICS_Capsule", EditConditionHides, ClampMin= "0.0"))
-	FVector2D CollisionCapsuleSize = FVector2D::ZeroVector;
+	FVector2D CollisionCapsuleSize = FVector2D::ZeroVector;*/
 
-	UPROPERTY(EditAnywhere, Category = "Item Collision Shape",
+	UPROPERTY(/*EditAnywhere, */VisibleDefaultsOnly, Category = "Item Collision Shape",
 		meta=(EditCondition="CollisionShape!=EItemCollisionShape::ICS_None", EditConditionHides))
 	FVector CollisionScale3D = FVector::OneVector;
 	
@@ -193,7 +193,7 @@ struct ARPG_API FNAItemBaseTableRow : public FTableRowBase
 		meta=(EditCondition="MeshType==EItemMeshType::IMT_Skeletal", EditConditionHides))
 	FNASkeletalMeshItemAssetData SkeletalMeshAssetData;
 	
-	UPROPERTY(EditAnywhere, Category = "Item Mesh",
+	UPROPERTY(/*EditAnywhere, */VisibleDefaultsOnly, Category = "Item Mesh",
 		meta=(EditCondition="MeshType!=EItemMeshType::IMT_None", EditConditionHides))
 	FTransform MeshTransform = FTransform::Identity;
 	

@@ -3,10 +3,13 @@
 
 #include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
 
+#include "Engine/SCS_Node.h"
+#include "Engine/SimpleConstructionScript.h"
 #include "Inventory/DataStructs/NAInventoryDataStructs.h"
 
 #include "Item/ItemActor/NAItemActor.h"
 #include "Item/ItemDataStructs/NAWeaponDataStructs.h"
+#include "Kismet2/BlueprintEditorUtils.h"
 
 #if WITH_EDITOR
 #include "Kismet2/KismetEditorUtilities.h"
@@ -91,9 +94,6 @@ void UNAItemEngineSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 					FKismetEditorUtilities::CompileBlueprint(
 						BP,
 						EBlueprintCompileOptions::SkipGarbageCollection
-						// | EBlueprintCompileOptions::IsRegeneratingOnLoad
-						// | EBlueprintCompileOptions::IncludeCDOInReferenceReplacement
-						// | EBlueprintCompileOptions::SkipNewVariableDefaultsDetection
 						 | EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
 					);
 				}
