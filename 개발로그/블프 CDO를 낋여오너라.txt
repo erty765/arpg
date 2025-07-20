@@ -305,3 +305,37 @@ CDO의 경우: OwnedComponents 순회하면서 "어태치 자식 입장에서 �
 블프 에디터의 우측 디테일 패널에서 편집된 값은 바로 블프 CDO에 적용됨.
 PostEditChangeProperty 호출 시, CDO의 프로퍼티를 확인해야 에디터에서 편집한 값을 가져올 수 있음.
 
+[07/20]
+⇒ 블프 에셋에 SCS 노드를 추가하거나(왼쪽 계층 트리에서 +추가 버튼으로 서브오브젝트 추가) 이벤트 그래프를 편집하거나(변수를 Get/Set하는 노드만 추가하는 경우 포함) 멤버 함수를 오버라이드하거나 등의 편집이 일어나면, 해당 블루프린트 에셋을 일반 블루프린트 에셋으로 엔진이 인식하는듯?
+⇒ 데이터 전용 블루프린트로서 인식되면, ItemCollision과 ItemMesh의 트랜스폼 정보가 날라가있음. 그외의 프로퍼티들은 직렬화된 값이 유지되는 것 같긴한데, 확실하지 않음.
+⇒ 블프 에셋에 위 상황에 해당하는 편집이 발생하면 해당 블프 에셋을 '데이터 전용 블루프린트'로 인식되지 않게 만드는 플래그 등의 프로퍼티가 변경되는듯? 이것을 찾아내서 ANAItemActor 계열의 블루 프린트 에셋들은 무조건 '에디터에서 편집한 이력이 있는 블루프린트(따라서 서브오브젝트들의 모든 프로퍼티 값이 패키지에 직렬화되는?)'로 인식되게끔 유도해보자
+
+/**
+ * Abstract base class of all blueprint graph nodes.
+ */
+UCLASS(abstract, MinimalAPI)
+class UK2Node : public UEdGraphNode
+
+/** Create a new unique Guid for this node */
+	ENGINE_API void CreateNewGuid();
+
+▷ 블프 이벤트 그래프에 멤버 변수 Get 노드를 추가했을때 콜스택:
+FKismetVariableDragDropAction::MakeGetter()
+UEdGraphSchema_K2::SpawnVariableGetNode()
+FEdGraphSchemaAction_K2NewNode::SpawnNode()
+FEdGraphSchemaAction_K2NewNode::CreateNode()
+UEdGrapth::AddNode()
+UEdGrapth::NotifyGraphChanged()
+
+▷이벤트 그래프에서 Get노드 지우고 컴파일 눌렀을 때
+...
+FKismetCompilerContext::CompileClassLayout()
+...
+FKismetCompilerContext::CreateAndProcessUbergraph()
+FKismetCompilerContext::ValidateNode()
+FKismetCompilerContext::ValidatePin()
+...
+
+UBlueprintGeneratedClass::UpdateCustomPropertyListForPostConstruction()
+
+⇒bForceFullEditor는 데이터 전용 블루프린트 에디터로 열리는 것을 방지하지만, 해당 블루프린트 에셋가 데이터 전용 블루프린트로 인식되는 것을 방지하지는 못함.
