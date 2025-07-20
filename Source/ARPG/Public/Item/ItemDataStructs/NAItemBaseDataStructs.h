@@ -60,6 +60,9 @@ struct ARPG_API FNAStaticMeshItemAssetData
 	UPROPERTY(EditAnywhere, Category = "Static Mesh Item Asset Data")
 	TObjectPtr<UStaticMesh> StaticMesh = nullptr;
 
+	UPROPERTY()
+	FTransform StaticMeshTransform = FTransform::Identity;
+
 	// (선택) Fracture Geometry Collection 에셋
 	UPROPERTY(EditAnywhere, Category = "Static Mesh Item Asset Data|Fracture")
 	UGeometryCollection* FractureCollection = nullptr;
@@ -77,9 +80,12 @@ struct FNASkeletalMeshItemAssetData
 	UPROPERTY(EditAnywhere, Category = "Skeletal Mesh Item Asset Data")
 	TObjectPtr<USkeletalMesh> SkeletalMesh = nullptr;
 
+	UPROPERTY()
+	FTransform SKeletalMeshTransform = FTransform::Identity;
+
 	// @TODO: 아이템 전용 애님 클래스 만들기?
 	UPROPERTY(EditAnywhere, Category = "Skeletal Mesh Item Asset Data")
-	TSubclassOf<UAnimInstance/*UItemAnimInstance*/> AnimClass;
+	TSubclassOf<UAnimInstance/*UNAItemAnimInstance*/> AnimClass;
 };
 
 UENUM(BlueprintType)
@@ -162,22 +168,6 @@ struct ARPG_API FNAItemBaseTableRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, Category = "Item Collision Shape")
 	EItemCollisionShape CollisionShape = EItemCollisionShape::ICS_None;
 	
-	/*UPROPERTY(EditAnywhere, Category = "Item Collision Shape",
-		meta=(EditCondition="CollisionShape==EItemCollisionShape::ICS_Sphere", EditConditionHides,ClampMin= "0.0"))
-	float CollisionSphereRadius = 0.f;
-
-	UPROPERTY(EditAnywhere, Category = "Item Collision Shape",
-			meta=(EditCondition="CollisionShape==EItemCollisionShape::ICS_Box", EditConditionHides, ClampMin= "0.0"))
-	FVector CollisionBoxExtent = FVector::ZeroVector;
-
-	UPROPERTY(EditAnywhere, Category = "Item Collision Shape",
-			meta=(EditCondition="CollisionShape==EItemCollisionShape::ICS_Capsule", EditConditionHides, ClampMin= "0.0"))
-	FVector2D CollisionCapsuleSize = FVector2D::ZeroVector;*/
-
-	UPROPERTY(/*EditAnywhere, */VisibleDefaultsOnly, Category = "Item Collision Shape",
-		meta=(EditCondition="CollisionShape!=EItemCollisionShape::ICS_None", EditConditionHides))
-	FVector CollisionScale3D = FVector::OneVector;
-	
 	/* ANAItemActor의 메쉬 타입*/
 	// None: 기본 생성자에서 DoNotCreateSubobject로 ItemMesh 생성 수정한 경우!! 반다시!! 이 플래그 써야함
 	UPROPERTY(EditAnywhere, Category = "Item Mesh")
@@ -192,10 +182,6 @@ struct ARPG_API FNAItemBaseTableRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, Category = "Item Mesh",
 		meta=(EditCondition="MeshType==EItemMeshType::IMT_Skeletal", EditConditionHides))
 	FNASkeletalMeshItemAssetData SkeletalMeshAssetData;
-	
-	UPROPERTY(/*EditAnywhere, */VisibleDefaultsOnly, Category = "Item Mesh",
-		meta=(EditCondition="MeshType!=EItemMeshType::IMT_None", EditConditionHides))
-	FTransform MeshTransform = FTransform::Identity;
 	
 	UPROPERTY(EditAnywhere, Category ="Item Icon")
 	FNAIconAssetData IconAssetData;

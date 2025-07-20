@@ -29,7 +29,7 @@ int32 ANAPickableItemActor::TryPerformAutoUse(AActor* User)
 		if (CurrQty - ConsumedQty <= 0)
 		{
 			// 자동 사용 후 아이템 다 씀 -> 이 액터 인스턴스 & 아이템 데이터 제거
-			if (UNAItemEngineSubsystem::Get()->DestroyRuntimeItemData(GetItemData()))
+			if (UNAItemEngineSubsystem::Get()->DestroyRuntimeItem(GetItemData()))
 			{
 				Destroy();
 				return -1;

@@ -156,7 +156,7 @@ bool UNAItemData::TryUseItem(AActor* User)
 				// 인벤토리에 보관된 아이템이 아닌 경우, 아이템 엔진 서브시스템에 직접 아이템 데이터 & 아이템 액터까지 제거 요청
 				if (UNAItemEngineSubsystem::Get())
 				{
-					return UNAItemEngineSubsystem::Get()->DestroyRuntimeItemData(ID, true/*, User*/);
+					return UNAItemEngineSubsystem::Get()->DestroyRuntimeItem(ID, true, User);
 				}
 			}
 			else

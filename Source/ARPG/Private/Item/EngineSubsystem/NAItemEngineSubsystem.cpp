@@ -3,25 +3,24 @@
 
 #include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
 
-#include "Engine/SCS_Node.h"
-#include "Engine/SimpleConstructionScript.h"
+#include "FileHelpers.h"
+#include "NACharacter.h"
 #include "Inventory/DataStructs/NAInventoryDataStructs.h"
 
 #include "Item/ItemActor/NAItemActor.h"
 #include "Item/ItemDataStructs/NAWeaponDataStructs.h"
-#include "Kismet2/BlueprintEditorUtils.h"
 
 #if WITH_EDITOR
 #include "Kismet2/KismetEditorUtilities.h"
 #endif
 
-// 프로그램 시작 시 0 에서 시작
-FThreadSafeCounter UNAItemEngineSubsystem::IDCount(0);
 
-// 와 이것도 정적 로드로 CDO 생김 ㅁㅊ
 UNAItemEngineSubsystem::UNAItemEngineSubsystem()
 {
 }
+
+// 프로그램 시작 시 0 에서 시작
+FThreadSafeCounter UNAItemEngineSubsystem::IDCount(0);
 
 void UNAItemEngineSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -68,7 +67,7 @@ void UNAItemEngineSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 			{
 				FName  RowName = Pair.Key;
 				FNAItemBaseTableRow* Row = DT->FindRow<FNAItemBaseTableRow>(RowName, TEXT("Mapping [soft] item meta data"));
-				if (!Row || Row->ItemClass.IsNull()) { continue; }
+				if (!Row || Row->ItemClass.IsNull()) continue; 
 				FDataTableRowHandle Handle;
 				Handle.DataTable = DT;
 				Handle.RowName = RowName;
@@ -87,15 +86,16 @@ void UNAItemEngineSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 			for (const auto& Pair : SoftItemMetaData)
 			{
 				UClass* NewItemActorClass = Pair.Key.LoadSynchronous();
-				// 블프 CDO 동적 패치 이후, 재컴파일 -> 블프 에디터 패널에 동적 패치한 내용을 반영하기 위함
 #if WITH_EDITOR
+				// 블루프린트 CDO 동적 초기화 후 재컴파일 -> 동적 초기화한 내용을 블프 에디터 패널에 반영하기 위함
 				if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(NewItemActorClass)))
 				{
 					FKismetEditorUtilities::CompileBlueprint(
 						BP,
 						EBlueprintCompileOptions::SkipGarbageCollection
-						 | EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
+						| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
 					);
+					BP->MarkPackageDirty();
 				}
 #endif
 				if (NewItemActorClass && !Pair.Value.IsNull())
@@ -109,6 +109,10 @@ void UNAItemEngineSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	if (!ItemDataTableSources.IsEmpty() && !ItemMetaDataMap.IsEmpty()) {
 		bMetaDataInitialized = true;
 		UE_LOG(NAItem, Display, TEXT("[%hs] 아이템 메타데이터 인스턴싱 완료"), __FUNCTION__);
+#if WITH_EDITOR
+		// 에디터가 완전히 켜진 뒤에 한 번만 호출
+		FCoreDelegates::OnPostEngineInit.AddUObject(this, &UNAItemEngineSubsystem::HandlePostEngineInit);
+#endif
 	}
 }
 
@@ -116,16 +120,28 @@ void UNAItemEngineSubsystem::Deinitialize()
 {
 	Super::Deinitialize();
 }
+
 #if WITH_EDITOR
+void UNAItemEngineSubsystem::HandlePostEngineInit()
+{
+	// 한 번만 실행되도록 바인딩 해제
+	FCoreDelegates::OnPostEngineInit.RemoveAll(this);
+
+	// 더티된 모든 패키지를 저장
+	FEditorFileUtils::SaveDirtyPackages(
+		/*bPromptUserToSaveMap=*/    false,
+		/*bPromptUserToSaveContent=*/true,
+		/*bOnlyDirty=*/              true,
+		/*bPromptForCheckout=*/      false
+	);
+}
+
 bool UNAItemEngineSubsystem::IsRegisteredItemMetaClass(UClass* ItemClass) const
 {
 	UClass* Key = ItemClass;
-	if (UBlueprintGeneratedClass* BPClass = Cast<UBlueprintGeneratedClass>(ItemClass))
+	if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(ItemClass)))
 	{
-		if (UBlueprint* BP = Cast<UBlueprint>(BPClass->ClassGeneratedBy))
-		{
-			Key = BP->GeneratedClass.Get();
-		}
+		Key = BP->GeneratedClass.Get();
 	}
 	Key = Key ? Key : ItemClass;
 	
@@ -272,7 +288,7 @@ UNAItemData* UNAItemEngineSubsystem::CreateItemDataBySlot(UWorld* InWorld, const
     return nullptr;
 }
 
-bool UNAItemEngineSubsystem::DestroyRuntimeItemData(const FName& InItemID, const bool bDestroyItemActor/*, AActor* Instigator*/)
+bool UNAItemEngineSubsystem::DestroyRuntimeItem(const FName& InItemID, const bool bDestroyItemActor, AActor* Instigator)
 {
     bool bResult = RuntimeItemDataMap.Contains(InItemID);
     if (bResult)
@@ -287,13 +303,23 @@ bool UNAItemEngineSubsystem::DestroyRuntimeItemData(const FName& InItemID, const
           int32 bSucceed = RuntimeItemDataMap.Remove(InItemID);
           bResult = bSucceed == 1;
        }
-       if (GetWorld() && bDestroyItemActor/* && IsValid(Instigator)*/)
+       if (GetWorld() && bDestroyItemActor && IsValid(Instigator))
        {
-          ForEachItemActorOfClass<ANAItemActor>(GetWorld(), [InItemID/*, Instigator*/](ANAItemActor* ItemActor)
+          ForEachItemActorOfClass<ANAItemActor>(GetWorld(), [InItemID, Instigator](ANAItemActor* ItemActor)
           {
              if (ItemActor->GetItemData()->GetItemID() == InItemID)
              {
-             	ItemActor->Destroy();
+             	if (Instigator->HasAuthority())
+             	{
+             		ItemActor->Destroy();
+             	}
+                else
+                {
+                	if (ANACharacter* Character = Cast<ANACharacter>(Instigator))
+                	{
+                		Character->Server_DestroyItemActor(ItemActor);
+                	}
+                }
              }
           });
        }
@@ -301,9 +327,9 @@ bool UNAItemEngineSubsystem::DestroyRuntimeItemData(const FName& InItemID, const
     return bResult;
 }
 
-bool UNAItemEngineSubsystem::DestroyRuntimeItemData(UNAItemData* InItemData, const bool bDestroyItemActor)
+bool UNAItemEngineSubsystem::DestroyRuntimeItem(UNAItemData* ItemData, const bool bDestroyItemActor, AActor* Instigator)
 {
-    return DestroyRuntimeItemData(InItemData->ID, bDestroyItemActor);
+    return DestroyRuntimeItem(ItemData->ID, bDestroyItemActor, Instigator);
 }
 
 FName UNAItemEngineSubsystem::CreateItemID(const FString& MetaDataRowName)

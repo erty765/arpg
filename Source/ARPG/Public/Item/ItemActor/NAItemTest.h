@@ -30,6 +30,6 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 protected:
-	UPROPERTY(VisibleAnywhere)
+	UPROPERTY(Transient, VisibleAnywhere)
 	UStaticMeshComponent* TestStaticMeshComponent;
 };

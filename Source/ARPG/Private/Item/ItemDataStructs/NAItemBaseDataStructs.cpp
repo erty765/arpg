@@ -1,8 +1,8 @@
 #include "Item/ItemDataStructs/NAItemBaseDataStructs.h"
-#include "Item/PickableItem/NAWeapon.h"
 #include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
-#include "Item/ItemActor/NAPlaceableItemActor.h"
+#include "Item/PickableItem/NAWeapon.h"
 #include "Item/PickableItem/NAPowerNode.h"
+#include "Item/ItemActor/NAPlaceableItemActor.h"
 #include "Misc/StringUtils.h"
 
 #if WITH_EDITOR

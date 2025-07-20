@@ -549,6 +549,14 @@ void ANACharacter::SetStopOverrideControlRotation( bool bFlag, const FRotator& R
 	}
 }
 
+void ANACharacter::Server_DestroyItemActor_Implementation(ANAItemActor* ItemActor)
+{
+	if (IsValid(ItemActor))
+	{
+		ItemActor->Destroy();
+	}
+}
+
 void ANACharacter::InitializeChildActor( AActor* Actor )
 {
 	Actor->SetOwner( this );

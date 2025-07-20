@@ -50,12 +50,9 @@ public:
       if (!IsItemMetaDataInitialized()) return nullptr;
       
       UClass* Key = InItemActorClass;
-      if (UBlueprintGeneratedClass* BPClass = Cast<UBlueprintGeneratedClass>(InItemActorClass))
+      if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(InItemActorClass)))
       {
-         if (UBlueprint* BP = Cast<UBlueprint>(BPClass->ClassGeneratedBy))
-         {
-            Key = BP->GeneratedClass.Get();
-         }
+         Key = BP->GeneratedClass.Get();
       }
       Key = Key ? Key : InItemActorClass;
 
@@ -83,21 +80,18 @@ public:
 
    template<typename ItemDTRow_T = FNAItemBaseTableRow>
       requires TIsDerivedFrom<ItemDTRow_T, FNAItemBaseTableRow>::IsDerived
-   const ItemDTRow_T* GetItemMetaDataByClass(UClass* InItemActorClass) const
+   const ItemDTRow_T* GetItemMetaDataByClass(UClass* ItemClass) const
    {
-      if (!InItemActorClass->IsChildOf<ANAItemActor>()) return nullptr;
+      if (!ItemClass->IsChildOf<ANAItemActor>()) return nullptr;
       if (!IsSoftItemMetaDataInitialized()) return nullptr;
        
-      UClass* Key = InItemActorClass;
+      UClass* Key = ItemClass;
 #if WITH_EDITOR
-      if (UBlueprintGeneratedClass* BPClass = Cast<UBlueprintGeneratedClass>(InItemActorClass))
+      if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(ItemClass)))
       {
-         if (UBlueprint* BP = Cast<UBlueprint>(BPClass->ClassGeneratedBy))
-         {
-            Key = BP->GeneratedClass.Get();
-         }
+         Key = BP->GeneratedClass.Get();
       }
-      Key = Key ? Key : InItemActorClass;
+      Key = Key ? Key : ItemClass;
 #endif
       if (!IsItemMetaDataInitialized())
       {
@@ -118,15 +112,15 @@ public:
 
    template<typename ItemActor_T = ANAItemActor>
       requires TIsDerivedFrom< ItemActor_T, ANAItemActor>::IsDerived
-   const UNAItemData* CreateItemDataByActor(ItemActor_T* InItemActor)
+   const UNAItemData* CreateItemDataByActor(ItemActor_T* ItemActor)
    {
-      if (!InItemActor)
+      if (!ItemActor)
       {
          ensureAlwaysMsgf(false, TEXT("[%hs] 유효하지 않은 ANAItemActor."), __FUNCTION__);
          return nullptr;
       }
        
-      const bool bIsCDOActor = InItemActor->HasAnyFlags(RF_ClassDefaultObject);
+      const bool bIsCDOActor = ItemActor->HasAnyFlags(RF_ClassDefaultObject);
        
       if (!bIsCDOActor && !IsItemMetaDataInitialized())
       {
@@ -135,10 +129,10 @@ public:
          return nullptr;
       }
        
-      UClass* InItemActorClass = InItemActor->GetClass();
+      UClass* ItemClass = ItemActor->GetClass();
 
       // 1) 아이템 메타데이터 검색
-      const TMap<TSubclassOf<ANAItemActor>, FDataTableRowHandle>::ValueType* ValuePtr = ItemMetaDataMap.Find(InItemActorClass);
+      const TMap<TSubclassOf<ANAItemActor>, FDataTableRowHandle>::ValueType* ValuePtr = ItemMetaDataMap.Find(ItemClass);
       if (!ValuePtr)
       {
          ensureAlwaysMsgf(false,
@@ -152,7 +146,7 @@ public:
             false,
             TEXT(
                "[%hs] 메타데이터에 등록되지 않은 ItemClass(%s)."
-            ), __FUNCTION__, *GetNameSafe(InItemActorClass));
+            ), __FUNCTION__, *GetNameSafe(ItemClass));
          return nullptr;
       }
 
@@ -173,7 +167,7 @@ public:
 
       {
          UE_LOG(NAItem, Warning, TEXT("[%hs] 아이템 데이터 생성 완료. ID: %s, 관련 액터: %s"),
-            __FUNCTION__, *NewItemData->ID.ToString(), *GetNameSafe(InItemActor));
+            __FUNCTION__, *NewItemData->ID.ToString(), *GetNameSafe(ItemActor));
       }
        
       return RuntimeItemDataMap[NewItemData->ID].Get();
@@ -187,18 +181,18 @@ public:
    UNAItemData* CreateItemDataBySlot( UWorld* InWorld, const FNAInventorySlot& InInventorySlot );
 
    /**
-    * * @param InItemID 
+    * @param InItemID 
     * @param bDestroyItemActor : 해당 아이템 데이터를 참조하는(ID값으로 검색) 아이템 액터를 찾아서 파괴할지 여부
     * @return 
     */
-   bool DestroyRuntimeItemData(const FName& InItemID, const bool bDestroyItemActor = false/*, AActor* Instigator = nullptr*/);
+   bool DestroyRuntimeItem(const FName& InItemID, const bool bDestroyItemActor = false, AActor* Instigator = nullptr);
    /**
-    * * @param InItemID 
+    * @param InItemID 
     * @param bDestroyItemActor : 해당 아이템 데이터를 참조하는(ID값으로 검색) 아이템 액터를 찾아서 파괴할지 여부.
     * 아이템 액터의 생명주기를 명시적으로 조절해야하는 경우 이 플래그를 쓰면 안됨
     * @return 
     */
-   bool DestroyRuntimeItemData(UNAItemData* InItemData, const bool bDestroyItemActor = false);
+   bool DestroyRuntimeItem(UNAItemData* ItemData, const bool bDestroyItemActor = false, AActor* Instigator = nullptr);
 
    template <typename ItemActorT, typename Func>
       requires TIsDerivedFrom<ItemActorT, ANAItemActor>::IsDerived
@@ -222,6 +216,10 @@ protected:
    }
 
    FName CreateItemID(const FString& MetaDataRowName);
+
+#if WITH_EDITOR
+   void HandlePostEngineInit();
+#endif
        
 private:
    // 실제 사용할 DataTable 포인터 보관

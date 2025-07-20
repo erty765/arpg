@@ -561,7 +561,7 @@ int32 UNAInventoryComponent::TryAddItem(UNAItemData* ItemToAdd)
 			}
 			if (Result.OperationResult == ENAItemAddStatus::IAS_AddedAll)
 			{
-				UNAItemEngineSubsystem::Get()->DestroyRuntimeItemData(ItemToAdd);
+				UNAItemEngineSubsystem::Get()->DestroyRuntimeItem(ItemToAdd);
 			}
 		}
 		else
@@ -655,7 +655,7 @@ bool UNAInventoryComponent::HandleRemoveItem(const FName& SlotID)
 		// 인벤토리에서 수량이 0으로 변경된 아이템 데이터를 제거
 		if (RemovedItem->GetQuantity() <= 0)
 		{
-			UNAItemEngineSubsystem::Get()->DestroyRuntimeItemData(RemovedItem);
+			UNAItemEngineSubsystem::Get()->DestroyRuntimeItem(RemovedItem);
 		}
 		return true;
 	}

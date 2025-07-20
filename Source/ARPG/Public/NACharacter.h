@@ -169,6 +169,9 @@ public:
 
 	void SetStopOverrideControlRotation( bool bFlag, const FRotator& Rotator );
 
+	UFUNCTION(Server, Reliable)
+	void Server_DestroyItemActor(class ANAItemActor* ItemActor);
+
 protected:
 	void InitializeChildActor( AActor* Actor );
 

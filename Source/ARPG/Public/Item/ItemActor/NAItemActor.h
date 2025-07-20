@@ -62,7 +62,7 @@ public:
 				TEXT(
 					"[MigrateItemStateFromChildActor]  ")))
 			{
-				if (UNAItemEngineSubsystem::Get()->DestroyRuntimeItemData(TargetActor->ItemDataID))
+				if (UNAItemEngineSubsystem::Get()->DestroyRuntimeItem(TargetActor->ItemDataID))
 				{
 					TargetActor->ItemDataID = SourceChildActor->ItemDataID;
 					if (SourceChildActor->InteractableInterfaceRef && TargetActor->InteractableInterfaceRef)
@@ -160,8 +160,6 @@ protected:
 	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
 	virtual void PostEditChangeChainProperty(struct FPropertyChangedChainEvent& PropertyChangedEvent) override;
 	virtual void PostCDOCompiled(const FPostCDOCompiledContext& Context) override;
-	
-	virtual void BackupItemSubobjectsProperties();
 #endif
 	
 private:
@@ -169,7 +167,10 @@ private:
 	void InitItemData();
 	void VerifyInteractableData();
 	void InitCheckIfChildActor();
-
+#if WITH_EDITOR || WITH_EDITORONLY_DATA
+	void EnsureForceNonDataOnlyVariableUsed();
+#endif
+	
 protected:
 	// Optional Subobject
 	uint8 bNeedItemCollision :1 = true;
@@ -189,21 +190,28 @@ protected:
 	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "Item Actor | Mesh")
 	UMeshComponent* ItemMesh;
 
-	UPROPERTY(VisibleAnywhere, Category = "Item Actor | Static Mesh")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Item Actor | Static Mesh")
 	TObjectPtr<class UGeometryCollection> ItemFractureCollection;
 	
-	UPROPERTY(VisibleAnywhere, Category = "Item Actor | Static Mesh")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Item Actor | Static Mesh")
 	TObjectPtr<class UGeometryCollectionCache> ItemFractureCache;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Item Actor | Trigger Sphere")
 	TObjectPtr<class USphereComponent> TriggerSphere;
 
-	UPROPERTY(VisibleAnywhere, Category = "Item Actor | Static Mesh")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Item Actor | Static Mesh")
 	TObjectPtr<class UNAItemWidgetComponent> ItemWidgetComponent;
 
 private:
 	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "Item Actor", meta = (AllowPrivateAccess = "true"))
 	FName ItemDataID;
+	
+#if WITH_EDITORONLY_DATA
+	// 이 블루프린트 클래스가 '데이터 전용(BlueprintTypeOnly)'으로 분류되는 것을 방지하기 위한 참조용 더미 변수.
+	// 이벤트 그래프에서 이 변수의 Getter 노드를 참조함으로써, 엔진이 해당 클래스를 '로직을 포함한 블루프린트 클래스'로 인식하도록 유도.
+	UPROPERTY(BlueprintReadOnly, Category = "Editor Only", meta = (AllowPrivateAccess = "true"))
+	uint8 bForceNonDataOnlyBlueprint : 1 = false;
+#endif
 	
 //======================================================================================================================
 // Interactable Interface Implements
@@ -241,7 +249,7 @@ protected:
 	TScriptInterface<INAInteractableInterface> InteractableInterfaceRef = nullptr;
 };
 
-UCLASS()
+UCLASS(NotBlueprintable)
 class ARPG_API ANAItemWidgetPopupActor final : public AActor
 {
 	GENERATED_BODY()
