@@ -662,4 +662,14 @@ ex) 'ItemCollision(Box)'와 'ItemMesh(Static)'으로 뜨는 오류 (Item Collisi
 └ 아이템 액터 블프에서 -> 메타데이터로 ItemCollision | ItemMesh 프로퍼티 백업
 └ 메타 데이터에서 CollisionShape/MeshType 바꿀때 아이템 액터 블프에 백업해둔 프로퍼티 함께 적용
 └ 메타 데이터 테이블에 콜리전 쉐입 별 사이즈 백업용 uproperty 롤백
-		 
+
+[07/21]
+◎ 아이템 액터 블프 에디터의 이벤트 그래프에 껴넣은 더미 노드 숨기기:
+1. UK2Node_VariableGet 클래스 오버라이드
+2. FGraphPanelNodeFactory 클래스 오버라이드: CreateNode 오버라이드
+3. FGraphPanelNodeFactory를 등록할 모듈 클래스 만들기 (에디터 빌드 전용):
+└StartupModule() 오버라이드: FEdGraphUtilities::RegisterVisualNodeFactory 호출 시 커스텀 노드 팩토리 클래스를 인자로 넘기기
+└ShutdownModule() 오버라이드: 등록된 팩토리 동적 할당 해제
+4. 에디터 빌드 타겟에 모듈 클래스 등록하기
+
+와! 즐겁다!(negative)
