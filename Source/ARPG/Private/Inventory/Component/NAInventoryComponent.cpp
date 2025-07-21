@@ -433,16 +433,16 @@ UNAItemData* UNAInventoryComponent::SelectNextWeapon(int32 Direction) const
 {
 	if (FMath::Abs(Direction) != 1) return nullptr;
 
-	int32 MaxWeaponIndex = MaxWeaponSlotCount - 1;
-	int32 NewIndex;
-	if (EquippedWeaponIndex == -1)
-	{
-		NewIndex = Direction > 0 ? 0 : MaxWeaponIndex;
-	}
-	else
-	{
-		NewIndex = (EquippedWeaponIndex + Direction + MaxWeaponIndex) % MaxWeaponIndex;
-	}
+       int32 MaxWeaponIndex = MaxWeaponSlotCount - 1;
+       int32 NewIndex;
+       if (EquippedWeaponIndex == -1)
+       {
+               NewIndex = Direction > 0 ? 0 : MaxWeaponIndex;
+       }
+       else
+       {
+               NewIndex = (EquippedWeaponIndex + Direction + MaxWeaponSlotCount) % MaxWeaponSlotCount;
+       }
 	if (FMath::IsWithinInclusive(NewIndex, 0, MaxWeaponIndex))
 	{
 		FName WeaponSlotID = MakeWeaponSlotID(NewIndex);
