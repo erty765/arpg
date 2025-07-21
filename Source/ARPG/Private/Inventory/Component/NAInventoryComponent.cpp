@@ -442,7 +442,7 @@ UNAItemData* UNAInventoryComponent::SelectNextWeapon(int32 Direction) const
 	}
 	else
 	{
-		NewIndex = (EquippedWeaponIndex + Direction + MaxWeaponIndex) % MaxWeaponIndex;
+		NewIndex = (EquippedWeaponIndex + Direction + MaxWeaponSlotCount) % MaxWeaponSlotCount;
 	}
 	if (FMath::IsWithinInclusive(NewIndex, 0, MaxWeaponIndex))
 	{

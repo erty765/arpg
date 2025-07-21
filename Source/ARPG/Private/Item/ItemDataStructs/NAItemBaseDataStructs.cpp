@@ -8,88 +8,84 @@
 #if WITH_EDITOR
 void FNAItemBaseTableRow::OnDataTableChanged(const UDataTable* InDataTable, const FName InRowName)
 {
-	FNAItemBaseTableRow* ItemRowStruct = InDataTable->FindRow<FNAItemBaseTableRow>(InRowName, TEXT("On Data Table Changed"));
+	if (!UNAItemEngineSubsystem::Get()
+		|| !UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized()) return;
 	
-	if (ItemRowStruct == this)
-	{
-		if (!ItemRowStruct->ItemClass.IsValid()) return;
-		
-		if (UNAItemEngineSubsystem::Get()
-			&& UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized())
-		{
-			UClass* ItemActorClass = ItemRowStruct->ItemClass.Get();
-			if (ItemActorClass)
-			{
-				if (!UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(ItemActorClass))
-				{
-					UNAItemEngineSubsystem::Get()->RegisterNewItemMetaData(ItemActorClass, InDataTable, InRowName);
-				}
-				else
-				{
-					UNAItemEngineSubsystem::Get()->VerifyItemMetaDataRowHandle(ItemActorClass, InDataTable, InRowName);
-				}
-			}
-		}
+	FNAItemBaseTableRow* ItemMetaDataStruct = InDataTable->FindRow<FNAItemBaseTableRow>(InRowName, TEXT("On Data Table Changed"));
+	check(this == ItemMetaDataStruct);
 
-		if (ItemType == EItemType::IT_Weapon
-			|| ItemClass.Get()->IsChildOf<ANAWeapon>())
+	if (!ItemMetaDataStruct->ItemClass.IsValid()) return;
+	
+	if (UClass* ItemActorClass = ItemMetaDataStruct->ItemClass.Get())
+	{
+		if (!UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(ItemActorClass))
 		{
-			NumericData.bIsStackable = false;
-			NumericData.MaxSlotStackSize = 1;
-			NumericData.MaxInventoryHoldCount = 1;
+			UNAItemEngineSubsystem::Get()->RegisterNewItemMetaData(ItemActorClass, InDataTable, InRowName);
 		}
 		else
 		{
-			if (!NumericData.bIsStackable)
-			{
-				NumericData.MaxSlotStackSize = 1;
-				NumericData.MaxInventoryHoldCount = FMath::Max(0, NumericData.MaxInventoryHoldCount);
-			}
-			
-			if (NumericData.MaxInventoryHoldCount == 0)
-			{
-				NumericData.MaxSlotStackSize = FMath::Max(0, NumericData.MaxSlotStackSize);
-			}
-			else if (NumericData.MaxInventoryHoldCount > 0)
-			{
-				NumericData.MaxSlotStackSize = FMath::Max(1, NumericData.MaxSlotStackSize);
-			}
+			UNAItemEngineSubsystem::Get()->VerifyItemMetaDataRowHandle(ItemActorClass, InDataTable, InRowName);
 		}
-		
-		if (!InRowName.IsNone())
+	}
+
+	if (ItemType == EItemType::IT_Weapon
+		|| ItemClass.Get()->IsChildOf<ANAWeapon>())
+	{
+		NumericData.bIsStackable = false;
+		NumericData.MaxSlotStackSize = 1;
+		NumericData.MaxInventoryHoldCount = 1;
+	}
+	else
+	{
+		if (!NumericData.bIsStackable)
 		{
-			FString NewItemName = FStringUtils::InsertSpacesBeforeUppercaseSmart(InRowName.ToString());
-			TextData.Name = FText::FromString(NewItemName);
+			NumericData.MaxSlotStackSize = 1;
+			NumericData.MaxInventoryHoldCount = FMath::Max(0, NumericData.MaxInventoryHoldCount);
 		}
 
-		if (InteractableData.InteractableType != ENAInteractableType::None)
+		if (NumericData.MaxInventoryHoldCount == 0)
 		{
-			FString EnumStr = FStringUtils::EnumToDisplayString(InteractableData.InteractableType);
-			EnumStr = FStringUtils::InsertSpacesBeforeUppercaseSmart(EnumStr);
-			InteractableData.InteractionName = FText::FromString(EnumStr);
+			NumericData.MaxSlotStackSize = FMath::Max(0, NumericData.MaxSlotStackSize);
 		}
-
-		if (ItemClass.Get()->IsChildOf<ANAPlaceableItemActor>())
+		else if (NumericData.MaxInventoryHoldCount > 0)
 		{
-			InteractableData.bIsUnlimitedInteractable = true;
-			InteractableData.InteractableCount = 0;
+			NumericData.MaxSlotStackSize = FMath::Max(1, NumericData.MaxSlotStackSize);
 		}
+	}
 
-		if (ItemClass.Get()->IsChildOf<ANAPowerNode>())
-		{
-			ItemType = EItemType::IT_PowerNode;
-		}
+	if (!InRowName.IsNone())
+	{
+		FString NewItemName = FStringUtils::InsertSpacesBeforeUppercaseSmart(InRowName.ToString());
+		TextData.Name = FText::FromString(NewItemName);
+	}
 
-		if (ItemType == EItemType::IT_Credit || ItemType == EItemType::IT_PowerNode)
+	if (InteractableData.InteractableType != ENAInteractableType::None)
+	{
+		FString EnumStr = FStringUtils::EnumToDisplayString(InteractableData.InteractableType);
+		EnumStr = FStringUtils::InsertSpacesBeforeUppercaseSmart(EnumStr);
+		InteractableData.InteractionName = FText::FromString(EnumStr);
+	}
+
+	if (ItemClass.Get()->IsChildOf<ANAPlaceableItemActor>())
+	{
+		InteractableData.bIsUnlimitedInteractable = true;
+		InteractableData.InteractableCount = 0;
+	}
+
+	if (ItemClass.Get()->IsChildOf<ANAPowerNode>())
+	{
+		ItemType = EItemType::IT_PowerNode;
+	}
+
+	if (ItemType == EItemType::IT_Credit || ItemType == EItemType::IT_PowerNode)
+	{
+		NumericData.bIsStackable = true;
+		NumericData.MaxSlotStackSize = 0;
+		NumericData.MaxInventoryHoldCount = 0;
+
+		if (InteractableData.InteractableType == ENAInteractableType::None)
 		{
-			NumericData.bIsStackable = true;
-			NumericData.MaxSlotStackSize = 0;
-			NumericData.MaxInventoryHoldCount = 0;
-			
-			if (InteractableData.InteractableType == ENAInteractableType::None)
-			{
-				InteractableData.InteractableType = ENAInteractableType::Pickup;
-			}
+			InteractableData.InteractableType = ENAInteractableType::Pickup;
 		}
 	}
 }

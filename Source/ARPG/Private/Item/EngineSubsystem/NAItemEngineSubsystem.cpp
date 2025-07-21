@@ -3,7 +3,6 @@
 
 #include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
 
-#include "FileHelpers.h"
 #include "NACharacter.h"
 #include "Inventory/DataStructs/NAInventoryDataStructs.h"
 
@@ -12,6 +11,8 @@
 
 #if WITH_EDITOR
 #include "Kismet2/KismetEditorUtilities.h"
+#include "UObject/SavePackage.h"
+#include "FileHelpers.h"
 #endif
 
 
@@ -78,35 +79,41 @@ void UNAItemEngineSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		// 4) 메타데이터 맵 빌드
 		UE_LOG(NAItem, Display,
 			 TEXT("[%hs] 아이템 메타데이터 매핑 진행"), __FUNCTION__);
-		if ( !SoftItemMetaData.IsEmpty() && ItemMetaDataMap.IsEmpty())
+		if ( !SoftItemMetaData.IsEmpty() && ItemMetaData.IsEmpty())
 		{
 			bSoftMetaDataInitialized = true;
-			ItemMetaDataMap.Reserve(SoftItemMetaData.Num());
+			ItemMetaData.Reserve(SoftItemMetaData.Num());
 			
 			for (const auto& Pair : SoftItemMetaData)
 			{
 				UClass* NewItemActorClass = Pair.Key.LoadSynchronous();
 #if WITH_EDITOR
+				if (ANAItemActor* ItemActorCDO = Cast<ANAItemActor>(
+					NewItemActorClass->GetDefaultObject(false)))
+				{
+					ItemActorCDO->OnItemClassRegisteredToMetaData.ExecuteIfBound();
+				}
 				// 블루프린트 CDO 동적 초기화 후 재컴파일 -> 동적 초기화한 내용을 블프 에디터 패널에 반영하기 위함
 				if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(NewItemActorClass)))
 				{
 					FKismetEditorUtilities::CompileBlueprint(
 						BP,
-						EBlueprintCompileOptions::SkipGarbageCollection
-						| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
-					);
-					BP->MarkPackageDirty();
+						EBlueprintCompileOptions::SkipSave
+						| EBlueprintCompileOptions::SkipGarbageCollection
+						| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing);
 				}
 #endif
 				if (NewItemActorClass && !Pair.Value.IsNull())
 				{
-					ItemMetaDataMap.Emplace(NewItemActorClass, Pair.Value);
+					ItemMetaData.Emplace(NewItemActorClass, Pair.Value);
 				}
 			}
 		}
 	}
-	
-	if (!ItemDataTableSources.IsEmpty() && !ItemMetaDataMap.IsEmpty()) {
+
+	if (bSoftMetaDataInitialized
+		&& SoftItemMetaData.Num() == ItemMetaData.Num())
+	{
 		bMetaDataInitialized = true;
 		UE_LOG(NAItem, Display, TEXT("[%hs] 아이템 메타데이터 인스턴싱 완료"), __FUNCTION__);
 #if WITH_EDITOR
@@ -129,15 +136,15 @@ void UNAItemEngineSubsystem::HandlePostEngineInit()
 
 	// 더티된 모든 패키지를 저장
 	FEditorFileUtils::SaveDirtyPackages(
-		/*bPromptUserToSaveMap=*/    false,
-		/*bPromptUserToSaveContent=*/true,
-		/*bOnlyDirty=*/              true,
-		/*bPromptForCheckout=*/      false
-	);
+		/*bPromptUserToSave=*/		false,
+		/*bSaveMapPackages=*/		true,
+		/*bSaveContentPackages=*/	true,
+		/*bFastSave=*/				true);
 }
 
 bool UNAItemEngineSubsystem::IsRegisteredItemMetaClass(UClass* ItemClass) const
 {
+	if (!IsSoftItemMetaDataInitialized()) return false;
 	UClass* Key = ItemClass;
 	if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(ItemClass)))
 	{
@@ -145,7 +152,8 @@ bool UNAItemEngineSubsystem::IsRegisteredItemMetaClass(UClass* ItemClass) const
 	}
 	Key = Key ? Key : ItemClass;
 	
-	return ItemClass->IsChildOf<ANAItemActor>() && ItemMetaDataMap.Contains(ItemClass);
+	return ItemClass->IsChildOf<ANAItemActor>() &&
+		(ItemMetaData.Contains(Key) || SoftItemMetaData.Contains(Key));
 }
 
 void UNAItemEngineSubsystem::RegisterNewItemMetaData(UClass* NewItemClass, const UDataTable* InDataTable, const FName InRowName)
@@ -162,7 +170,11 @@ void UNAItemEngineSubsystem::RegisterNewItemMetaData(UClass* NewItemClass, const
 		FDataTableRowHandle NewHandle;
 		NewHandle.DataTable = InDataTable;
 		NewHandle.RowName = InRowName;
-		ItemMetaDataMap.Emplace(NewItemClass, NewHandle);
+		ItemMetaData.Emplace(NewItemClass, NewHandle);
+		if (ANAItemActor* ItemActorCDO = Cast<ANAItemActor>(NewItemClass->GetDefaultObject(false)))
+		{
+			ItemActorCDO->OnItemClassRegisteredToMetaData.ExecuteIfBound();
+		}
 	}
 }
 
@@ -173,14 +185,14 @@ void UNAItemEngineSubsystem::VerifyItemMetaDataRowHandle(UClass* ItemClass, cons
 		bool bUpdateRowName = false;
 		bool bUpdateDataTable = false;
 		
-		if (ItemMetaDataMap[ItemClass].IsNull())
+		if (ItemMetaData[ItemClass].IsNull())
 		{
-			UE_LOG(NAItem, Warning, TEXT("[%hs] ItemMetaDataMap 내 '%s' 데이터 유효성 검사 실패. 새 DT 핸들 생성.")
+			UE_LOG(NAItem, Warning, TEXT("[%hs] ItemMetaData 내 '%s' 데이터 유효성 검사 실패. 새 DT 핸들 생성.")
 				, __FUNCTION__, *GetNameSafe(ItemClass));
 			bUpdateDataTable = true;
 		}
 
-		if (ItemMetaDataMap[ItemClass].DataTable != InDataTable)
+		if (ItemMetaData[ItemClass].DataTable != InDataTable)
 		{
 			ensureAlwaysMsgf(false,
 				TEXT("[%hs] 아이템 클래스-데이터 테이블 불일치. 클래스: %s")
@@ -189,21 +201,92 @@ void UNAItemEngineSubsystem::VerifyItemMetaDataRowHandle(UClass* ItemClass, cons
 			bUpdateDataTable = true;
 		}
 		
-		if (ItemMetaDataMap[ItemClass].RowName != InRowName)
+		if (ItemMetaData[ItemClass].RowName != InRowName)
 		{
 			UE_LOG(NAItem, Warning, TEXT("[%hs] ItemMetaDataMap의 RowName 불일치. 업데이트 진행. 클래스: %s, 기존 RowName: %s, 새 RowName: %s")
-				, __FUNCTION__, *GetNameSafe(ItemClass), *ItemMetaDataMap[ItemClass].RowName.ToString(), *InRowName.ToString());
+				, __FUNCTION__, *GetNameSafe(ItemClass), *ItemMetaData[ItemClass].RowName.ToString(), *InRowName.ToString());
 			bUpdateRowName = true;
 		}
 
 		if (bUpdateRowName)
 		{
-			ItemMetaDataMap[ItemClass].RowName = InRowName;
+			ItemMetaData[ItemClass].RowName = InRowName;
 		}
 		if (bUpdateDataTable)
 		{
-			ItemMetaDataMap[ItemClass].DataTable = InDataTable;
+			ItemMetaData[ItemClass].DataTable = InDataTable;
 		}
+	}
+}
+
+void UNAItemEngineSubsystem::MarkMetaDataTableDirty(UClass* ItemClass) const
+{
+	if (!IsRegisteredItemMetaClass(ItemClass)) return;
+
+	const FDataTableRowHandle* MetaDataRowHandle = nullptr;
+	if (!IsItemMetaDataInitialized())
+	{
+		MetaDataRowHandle = &SoftItemMetaData[ItemClass];
+		
+	}
+	else
+	{
+		MetaDataRowHandle = &ItemMetaData[ItemClass];
+	}
+	
+	if (MetaDataRowHandle && !MetaDataRowHandle->IsNull())
+	{
+		UPackage* ItemMetaDTPackage = MetaDataRowHandle->DataTable->GetPackage();
+		if (!ItemMetaDTPackage) return;
+
+		if (!ItemMetaDTPackage->IsDirty())
+		{
+			ItemMetaDTPackage->MarkPackageDirty();
+		}
+	}
+}
+ 
+void UNAItemEngineSubsystem::SaveMetaDataTable(UClass* ItemClass) const
+{
+	if (!IsRegisteredItemMetaClass(ItemClass)) return;
+
+	const FDataTableRowHandle* MetaDataRowHandle = nullptr;
+	if (!IsItemMetaDataInitialized())
+	{
+		MetaDataRowHandle = &SoftItemMetaData[ItemClass];
+		
+	}
+	else
+	{
+		MetaDataRowHandle = &ItemMetaData[ItemClass];
+	}
+	
+	if (MetaDataRowHandle && !MetaDataRowHandle->IsNull())
+	{
+		const UDataTable* ItemMetaDT = MetaDataRowHandle->DataTable.Get();
+		if (!ItemMetaDT) return;
+		
+		UPackage* ItemMetaDTPackage = ItemMetaDT->GetPackage();
+		if (!ItemMetaDTPackage) return;
+
+		if (!ItemMetaDTPackage->IsDirty())
+		{
+			ItemMetaDTPackage->MarkPackageDirty();
+		}
+
+		FString PackageFilePath = FPackageName::LongPackageNameToFilename(
+			ItemMetaDTPackage->GetName(), FPackageName::GetAssetPackageExtension());
+
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Standalone;
+		SaveArgs.SaveFlags = SAVE_NoError;
+		SaveArgs.bSlowTask = true;
+
+		ItemMetaDTPackage->Save(
+			ItemMetaDTPackage
+			, const_cast<UDataTable*>(ItemMetaDT)
+			, *PackageFilePath
+			, SaveArgs);
 	}
 }
 #endif
@@ -256,10 +339,10 @@ UNAItemData* UNAItemEngineSubsystem::CreateItemDataBySlot(UWorld* InWorld, const
 {
     if (InInventorySlot.ItemMetaDataKey)
     {
-       FDataTableRowHandle ItemMetaDTRowHandle = *(ItemMetaDataMap.Find(InInventorySlot.ItemMetaDataKey.Get()));
+       FDataTableRowHandle ItemMetaDTRowHandle = *(ItemMetaData.Find(InInventorySlot.ItemMetaDataKey.Get()));
        if (ItemMetaDTRowHandle.IsNull()) {
           ensureAlwaysMsgf(false,
-             TEXT("[%hs] ItemMetaDataMap 미등록 ItemActorClass. 클래스: %s"),
+             TEXT("[%hs] ItemMetaData 미등록 ItemActorClass. 클래스: %s"),
              __FUNCTION__, *InInventorySlot.ItemMetaDataKey.Get()->GetName());
           return nullptr;
        }

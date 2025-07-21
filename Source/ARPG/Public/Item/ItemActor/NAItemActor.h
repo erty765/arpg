@@ -11,6 +11,10 @@ class UNAMontageCombatComponent;
 class UBillboardComponent;
 class UMaterialInstanceConstant;
 
+#if WITH_EDITOR
+DECLARE_DELEGATE(FOnItemClassRegisteredToMetaData);
+#endif
+
 UENUM()
 enum class EItemSubobjDirtyFlags : uint8
 {
@@ -40,6 +44,7 @@ public:
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void Destroyed() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void PreSave(FObjectPreSaveContext SaveContext) override;
 
 protected:
 	virtual void BeginPlay() override;
@@ -133,8 +138,6 @@ public:
 	void FinalizeAndDestroyAfterInventoryAdded(AActor* Interactor);
 	
 protected:
-	virtual EItemSubobjDirtyFlags GetDirtySubobjectFlags(const FNAItemBaseTableRow* MetaData) const;
-	
 	UFUNCTION()
 	void OnActorBeginOverlap_Impl(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult & SweepResult);
 
@@ -149,17 +152,21 @@ protected:
 	
 	/** 기존 루트 컴포넌트를 제거하고, ItemCollision을 새로운 루트로 설정한 뒤, 기존 자식 컴포넌트들을 이관 */
 	virtual void ReplaceRootWithItemCollisionIfNeeded();
+
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
+	virtual void PostEditChangeChainProperty(struct FPropertyChangedChainEvent& PropertyChangedEvent) override;
+	virtual void PostCDOCompiled(const FPostCDOCompiledContext& Context) override;
+	
+	EItemSubobjDirtyFlags GetDirtySubobjectFlags() const;
+	EItemSubobjDirtyFlags GetDirtySubobjectFlags(const FNAItemBaseTableRow* MetaData) const;
 	
 	/**
 	 * 현재 아이템 메타데이터를 기반으로 동적 서브오브젝트(콜리전 및 메시 컴포넌트 등)를 재구성.
 	 * 메타데이터 기준에 더 이상 부합하지 않는 불필요한 컴포넌트는 제거.
 	 */
 	virtual void ReconstructItemSubobjectsFromMetaData();
-	
-#if WITH_EDITOR
-	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
-	virtual void PostEditChangeChainProperty(struct FPropertyChangedChainEvent& PropertyChangedEvent) override;
-	virtual void PostCDOCompiled(const FPostCDOCompiledContext& Context) override;
+	virtual void HandleOnItemClassRegisteredToMetaData_Impl() {}
 #endif
 	
 private:
@@ -167,8 +174,14 @@ private:
 	void InitItemData();
 	void VerifyInteractableData();
 	void InitCheckIfChildActor();
-#if WITH_EDITOR || WITH_EDITORONLY_DATA
+	
+#if WITH_EDITOR
+	void BackupItemSubobjectPropertiesToMetaData() const;
+	// 메타데이터 기반으로 아이템 액터 클래스 동적 초기화할 때 Or 에디터 런타임 중 메타데이터에 새로운 아이템 클래스를 추가했을 때
+	// → 1번만 실행
+	// @see: NAItemEngineSubsystem.cpp - Line 88
 	void EnsureForceNonDataOnlyVariableUsed();
+	void HandleItemClassRegisteredToMetaData();
 #endif
 	
 protected:
@@ -211,6 +224,9 @@ private:
 	// 이벤트 그래프에서 이 변수의 Getter 노드를 참조함으로써, 엔진이 해당 클래스를 '로직을 포함한 블루프린트 클래스'로 인식하도록 유도.
 	UPROPERTY(BlueprintReadOnly, Category = "Editor Only", meta = (AllowPrivateAccess = "true"))
 	uint8 bForceNonDataOnlyBlueprint : 1 = false;
+#endif
+#if WITH_EDITOR
+	FOnItemClassRegisteredToMetaData OnItemClassRegisteredToMetaData;
 #endif
 	
 //======================================================================================================================

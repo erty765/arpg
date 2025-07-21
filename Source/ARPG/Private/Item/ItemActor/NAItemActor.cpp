@@ -56,7 +56,7 @@ ANAItemActor::ANAItemActor(const FObjectInitializer& ObjectInitializer)
 
 	if (UNAItemEngineSubsystem* ItemEngineSubsystem = UNAItemEngineSubsystem::Get())
 	{
-		if (const FNAItemBaseTableRow* MetaData = ItemEngineSubsystem->GetItemMetaDataByClass(GetClass()))
+		if (const FNAItemBaseTableRow* MetaData = ItemEngineSubsystem->FindItemMetaData(GetClass()))
 		{
 			switch (MetaData->CollisionShape)
 			{
@@ -70,6 +70,7 @@ ANAItemActor::ANAItemActor(const FObjectInitializer& ObjectInitializer)
 				ItemCollision = CreateDefaultSubobject<UCapsuleComponent>(TEXT("ItemCollision(Capsule)"));
 				break;
 			default:
+				bNeedItemCollision = false;
 				break;
 			}
 			
@@ -82,6 +83,7 @@ ANAItemActor::ANAItemActor(const FObjectInitializer& ObjectInitializer)
 				ItemMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("ItemMesh(Skeletal)"));
 				break;
 			default:
+				bNeedItemMesh = false;
 				break;
 			}
 		}
@@ -169,15 +171,18 @@ void ANAItemActor::PostInitProperties()
 void ANAItemActor::PostLoad()
 {
 	Super::PostLoad();
-	
-	if (!HasAnyFlags(RF_ClassDefaultObject))
+
+	if (!UNAItemEngineSubsystem::Get()) return;
+#if WITH_EDITOR
+	// 메타데이터 인스턴싱 도중 로드된 경우
+	if (UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(GetClass())
+		&& !UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized())
 	{
-		if (ItemDataID.IsNone() && !GetWorld()->IsPreviewWorld()
-			&& !IsChildActor())
-		{
-			InitItemData();
-		}
+		BackupItemSubobjectPropertiesToMetaData();
 	}
+#endif
+	
+	InitItemData();
 }
 
 void ANAItemActor::PreRegisterAllComponents()
@@ -240,96 +245,6 @@ void ANAItemActor::InitCheckIfChildActor()
 	}
 }
 
-EItemSubobjDirtyFlags ANAItemActor::GetDirtySubobjectFlags(
-	const FNAItemBaseTableRow* MetaData) const
-{
-	EItemSubobjDirtyFlags DirtyFlags = EItemSubobjDirtyFlags::ISDF_None;
-	if (!MetaData) { ensureAlways(false); return DirtyFlags; }
-	if (bNeedItemCollision
-		&& MetaData->CollisionShape != EItemCollisionShape::ICS_None)
-	{
-		bool bDirtyShape = false;
-		bool bDirtyShapeProps = false;
-		bDirtyShape |= ItemCollision == nullptr;
-		bDirtyShapeProps |= ItemCollision == nullptr;
-		if (ItemCollision) {
-			const FCollisionShape Shape = ItemCollision->GetCollisionShape();
-			switch (MetaData->CollisionShape)
-			{
-			case EItemCollisionShape::ICS_Sphere:
-				bDirtyShape |= !Shape.IsSphere();
-				break;
-			case EItemCollisionShape::ICS_Box:
-				bDirtyShape |= !Shape.IsBox();
-				break;
-			case EItemCollisionShape::ICS_Capsule:
-				bDirtyShape |= !Shape.IsCapsule();
-				break;
-			default:
-				break;
-			}
-		}
-		if (bDirtyShape)
-		{
-			EnumAddFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionShape);
-		}
-		if (bDirtyShapeProps)
-		{
-			EnumAddFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionProperties);
-		}
-	}
-	
-	if (MetaData->MeshType != EItemMeshType::IMT_None && bNeedItemMesh)
-	{
-		bool bDirtyMesh = false;
-		bool bDirtyMeshProps = false;
-		bDirtyMesh |= ItemMesh == nullptr;
-		bDirtyMeshProps |= ItemMesh == nullptr;
-		if (ItemMesh) {
-			switch (MetaData->MeshType)
-			{
-			case EItemMeshType::IMT_Static:
-				{
-					UStaticMeshComponent* StaticMeshComp = Cast<UStaticMeshComponent>(ItemMesh);
-					bDirtyMesh |= StaticMeshComp == nullptr;
-					if (StaticMeshComp) {
-						bDirtyMeshProps |=
-							StaticMeshComp->GetStaticMesh() != MetaData->StaticMeshAssetData.StaticMesh;
-						bDirtyMeshProps |=
-							ItemFractureCollection != MetaData->StaticMeshAssetData.FractureCollection;
-						bDirtyMeshProps |=
-							ItemFractureCache != MetaData->StaticMeshAssetData.FractureCache;
-					}
-					break;
-				}
-			case EItemMeshType::IMT_Skeletal:
-				{
-					USkeletalMeshComponent* SkeletalMeshComp = Cast<USkeletalMeshComponent>(ItemMesh);
-					bDirtyMesh |= SkeletalMeshComp == nullptr;
-					if (SkeletalMeshComp) {
-						bDirtyMeshProps |=
-							SkeletalMeshComp->GetSkeletalMeshAsset() != MetaData->SkeletalMeshAssetData.SkeletalMesh;
-						bDirtyMeshProps |=
-							SkeletalMeshComp->GetAnimClass() != MetaData->SkeletalMeshAssetData.AnimClass;
-					}
-					break;
-				}
-			default:
-				break;
-			}
-		}
-		if (bDirtyMesh)
-		{
-			EnumAddFlags( DirtyFlags, EItemSubobjDirtyFlags::ISDF_MeshType );
-		}
-		if (bDirtyMeshProps)
-		{
-			EnumAddFlags( DirtyFlags, EItemSubobjDirtyFlags::ISDF_MeshProperties );
-		}
-	}
-	return DirtyFlags;
-}
-
 void ANAItemActor::ReplaceRootWithItemCollisionIfNeeded()
 {
 	if (!GetWorld()->IsGameWorld()) return;
@@ -368,6 +283,206 @@ void ANAItemActor::ReplaceRootWithItemCollisionIfNeeded()
 }
 
 #if WITH_EDITOR
+EItemSubobjDirtyFlags ANAItemActor::GetDirtySubobjectFlags() const
+{
+	const FNAItemBaseTableRow* MetaData =
+		UNAItemEngineSubsystem::Get()
+			? UNAItemEngineSubsystem::Get()->FindItemMetaData(GetClass())
+			: nullptr;
+	return GetDirtySubobjectFlags(MetaData);
+}
+
+EItemSubobjDirtyFlags ANAItemActor::GetDirtySubobjectFlags(const FNAItemBaseTableRow* MetaData) const
+{
+	EItemSubobjDirtyFlags DirtyFlags = EItemSubobjDirtyFlags::ISDF_None;
+	if (!MetaData) { ensureAlways(false); return DirtyFlags; }
+	
+	if (bNeedItemCollision
+		&& MetaData->CollisionShape != EItemCollisionShape::ICS_None)
+	{
+		bool bDirtyShape = false;
+		bool bDirtyShapeProps = false;
+		bDirtyShape |= ItemCollision == nullptr;
+		bDirtyShapeProps |= ItemCollision == nullptr;
+		if (ItemCollision) {
+			const FCollisionShape Shape = ItemCollision->GetCollisionShape();
+			switch (MetaData->CollisionShape)
+			{
+			case EItemCollisionShape::ICS_Sphere:
+				bDirtyShape |= !Shape.IsSphere();
+				bDirtyShapeProps |=
+					Shape.GetSphereRadius() != MetaData->CollisionSphereRadius;
+				break;
+			case EItemCollisionShape::ICS_Box:
+				bDirtyShape |= !Shape.IsBox();
+				bDirtyShapeProps |=
+					Shape.GetExtent() != MetaData->CollisionBoxExtent;
+				break;
+			case EItemCollisionShape::ICS_Capsule:
+				bDirtyShape |= !Shape.IsCapsule();
+				bDirtyShapeProps |=
+					Shape.GetCapsuleRadius() != MetaData->CollisionCapsuleSize.X;
+				bDirtyShapeProps |=
+					Shape.GetCapsuleHalfHeight() != MetaData->CollisionCapsuleSize.Y;
+				break;
+			default:
+				break;
+			}
+		}
+		if (bDirtyShape)
+		{
+			EnumAddFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionShape);
+		}
+		if (bDirtyShapeProps)
+		{
+			EnumAddFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionProperties);
+		}
+	}
+	
+	if (MetaData->MeshType != EItemMeshType::IMT_None && bNeedItemMesh)
+	{
+		bool bDirtyMesh = false;
+		bool bDirtyMeshProps = false;
+		bDirtyMesh |= ItemMesh == nullptr;
+		bDirtyMeshProps |= ItemMesh == nullptr;
+		if (ItemMesh) {
+			switch (MetaData->MeshType)
+			{
+			case EItemMeshType::IMT_Static:
+				{
+					UStaticMeshComponent* StaticMeshComp = Cast<UStaticMeshComponent>(ItemMesh);
+					bDirtyMesh |= StaticMeshComp == nullptr;
+					if (StaticMeshComp) {
+						bDirtyMeshProps |=
+							StaticMeshComp->GetStaticMesh() != MetaData->StaticMeshAssetData.StaticMesh;
+						bDirtyMeshProps |=
+							!StaticMeshComp->GetRelativeTransform().Equals(MetaData->StaticMeshAssetData.StaticMeshTransform);
+						bDirtyMeshProps |=
+							ItemFractureCollection != MetaData->StaticMeshAssetData.FractureCollection;
+						bDirtyMeshProps |=
+							ItemFractureCache != MetaData->StaticMeshAssetData.FractureCache;
+					}
+					break;
+				}
+			case EItemMeshType::IMT_Skeletal:
+				{
+					USkeletalMeshComponent* SkeletalMeshComp = Cast<USkeletalMeshComponent>(ItemMesh);
+					bDirtyMesh |= SkeletalMeshComp == nullptr;
+					if (SkeletalMeshComp) {
+						bDirtyMeshProps |=
+							SkeletalMeshComp->GetSkeletalMeshAsset() != MetaData->SkeletalMeshAssetData.SkeletalMesh;
+						bDirtyMeshProps |=
+							!SkeletalMeshComp->GetRelativeTransform().Equals(MetaData->SkeletalMeshAssetData.SkeletalMeshTransform);
+						bDirtyMeshProps |=
+							SkeletalMeshComp->GetAnimClass() != MetaData->SkeletalMeshAssetData.AnimClass;
+					}
+					break;
+				}
+			default:
+				break;
+			}
+		}
+		if (bDirtyMesh)
+		{
+			EnumAddFlags( DirtyFlags, EItemSubobjDirtyFlags::ISDF_MeshType );
+		}
+		if (bDirtyMeshProps)
+		{
+			EnumAddFlags( DirtyFlags, EItemSubobjDirtyFlags::ISDF_MeshProperties );
+		}
+	}
+	return DirtyFlags;
+}
+
+void ANAItemActor::BackupItemSubobjectPropertiesToMetaData() const
+{
+	if (!HasAnyFlags(RF_ClassDefaultObject)) return;
+
+	if (!UNAItemEngineSubsystem::Get()
+		|| !UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(GetClass())) return;
+    
+    FNAItemBaseTableRow* MetaData = UNAItemEngineSubsystem::Get()->FindItemMetaDataForEditing(GetClass());
+    if (!MetaData) return;
+    
+    const EItemSubobjDirtyFlags CDODirtyFlags = GetDirtySubobjectFlags(MetaData);
+	if (!EnumHasAnyFlags(CDODirtyFlags
+		, EItemSubobjDirtyFlags::ISDF_CollisionProperties | EItemSubobjDirtyFlags::ISDF_MeshProperties)) return;
+    
+    if (EnumHasAnyFlags(CDODirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionProperties))
+    {
+        if (ItemCollision)
+        {
+            if (USphereComponent* CDOSphereCollision = Cast<USphereComponent>(ItemCollision))
+            {
+                if (MetaData->CollisionSphereRadius != CDOSphereCollision->GetScaledSphereRadius())
+                {
+                    MetaData->CollisionSphereRadius = CDOSphereCollision->GetScaledSphereRadius();
+                }
+            }
+            else if (UBoxComponent* CDOBoxCollision = Cast<UBoxComponent>(ItemCollision))
+            {
+                if (MetaData->CollisionBoxExtent != CDOBoxCollision->GetScaledBoxExtent())
+                {
+                    MetaData->CollisionBoxExtent = CDOBoxCollision->GetScaledBoxExtent();
+                }
+            }
+            else if (UCapsuleComponent* CDOCapsuleCollision = Cast<UCapsuleComponent>(ItemCollision))
+            {
+                if (MetaData->CollisionCapsuleSize.X != CDOCapsuleCollision->GetScaledCapsuleRadius())
+                {
+                    MetaData->CollisionCapsuleSize.X = CDOCapsuleCollision->GetScaledCapsuleRadius();
+                }
+                if (MetaData->CollisionCapsuleSize.Y != CDOCapsuleCollision->GetScaledCapsuleHalfHeight())
+                {
+                    MetaData->CollisionCapsuleSize.Y = CDOCapsuleCollision->GetScaledCapsuleHalfHeight();
+                }
+            }
+        }
+    }
+
+    if (EnumHasAnyFlags(CDODirtyFlags, EItemSubobjDirtyFlags::ISDF_MeshProperties))
+    {
+        if (ItemMesh)
+        {
+            if (UStaticMeshComponent* StaticMeshComp = Cast<UStaticMeshComponent>(ItemMesh))
+            {
+                if (MetaData->StaticMeshAssetData.StaticMesh != StaticMeshComp->GetStaticMesh())
+                {
+                    MetaData->StaticMeshAssetData.StaticMesh = StaticMeshComp->GetStaticMesh();
+                }
+                if (MetaData->StaticMeshAssetData.FractureCollection != ItemFractureCollection)
+                {
+                    MetaData->StaticMeshAssetData.FractureCollection = ItemFractureCollection;
+                }
+                if (MetaData->StaticMeshAssetData.FractureCache != ItemFractureCache)
+                {
+                    MetaData->StaticMeshAssetData.FractureCache = ItemFractureCache;
+                }
+            	if (!MetaData->StaticMeshAssetData.StaticMeshTransform.Equals(StaticMeshComp->GetRelativeTransform()))
+            	{
+            		MetaData->StaticMeshAssetData.StaticMeshTransform = StaticMeshComp->GetRelativeTransform();
+            	}
+            }
+            else if (USkeletalMeshComponent* SkeletalMeshComp = Cast<USkeletalMeshComponent>(ItemMesh))
+            {
+                if (MetaData->SkeletalMeshAssetData.SkeletalMesh != SkeletalMeshComp->GetSkeletalMeshAsset())
+                {
+                    MetaData->SkeletalMeshAssetData.SkeletalMesh = SkeletalMeshComp->GetSkeletalMeshAsset();
+                }
+                if (MetaData->SkeletalMeshAssetData.AnimClass != SkeletalMeshComp->GetAnimClass())
+                {
+                    MetaData->SkeletalMeshAssetData.AnimClass = SkeletalMeshComp->GetAnimClass();
+                }
+            	if (!MetaData->SkeletalMeshAssetData.SkeletalMeshTransform.Equals(SkeletalMeshComp->GetRelativeTransform()))
+            	{
+            		MetaData->SkeletalMeshAssetData.SkeletalMeshTransform = SkeletalMeshComp->GetRelativeTransform();
+            	}
+            }
+        }
+    }
+	UNAItemEngineSubsystem::Get()->MarkMetaDataTableDirty(GetClass());
+}
+
 void ANAItemActor::PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent)
 {
 	Super::PostEditChangeProperty(PropertyChangedEvent);
@@ -381,32 +496,55 @@ void ANAItemActor::PostEditChangeChainProperty(struct FPropertyChangedChainEvent
 void ANAItemActor::PostCDOCompiled(const FPostCDOCompiledContext& Context)
 {
 	Super::PostCDOCompiled(Context);
-	
-	if (Context.bIsRegeneratingOnLoad)
+
+	if (HasAnyFlags(RF_ClassDefaultObject)
+		&& GetClass()->HasAllClassFlags(CLASS_CompiledFromBlueprint)
+		&& !OnItemClassRegisteredToMetaData.IsBound())
 	{
-		EnsureForceNonDataOnlyVariableUsed();
+		OnItemClassRegisteredToMetaData.BindUObject(this, &ThisClass::HandleItemClassRegisteredToMetaData);
 	}
+
 	ReconstructItemSubobjectsFromMetaData();
 }
-#endif
+
+void ANAItemActor::HandleItemClassRegisteredToMetaData()
+{
+	if (!UNAItemEngineSubsystem::Get()) return;
+
+	if (UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(GetClass()))
+	{
+		EnsureForceNonDataOnlyVariableUsed();
+		HandleOnItemClassRegisteredToMetaData_Impl();
+	}
+	// 에디터 런타임 중 메타데이터에 등록된 경우
+	if (UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized())
+	{
+		if (GetDirtySubobjectFlags() != EItemSubobjDirtyFlags::ISDF_None)
+		{
+			if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
+			{
+				FKismetEditorUtilities::CompileBlueprint(
+					BP,
+					EBlueprintCompileOptions::SkipSave
+					| EBlueprintCompileOptions::SkipGarbageCollection
+					| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
+				);
+				MarkPackageDirty();
+			}
+		}
+	}
+}
 
 void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 {
-	if (HasActorBegunPlay())
-	{
-		UE_LOG(NAItem, Warning, TEXT("[%hs] BeginPlay 이후에 호출됨!"), __FUNCTION__);
-		return;
-	}
-
-	if (!UNAItemEngineSubsystem::Get()
-		|| !UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized()
-#if WITH_EDITOR
-		|| !UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(GetClass())
-#endif
-	) return;
+	if (GetWorld() && GetWorld()->HasBegunPlay()) return;
 	
-	const FNAItemBaseTableRow* MetaData
-		= UNAItemEngineSubsystem::Get()->GetItemMetaDataByClass(GetClass());
+	if (!UNAItemEngineSubsystem::Get()) return;
+
+	if (!UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(GetClass())
+		|| !UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized()) return;
+	
+	const FNAItemBaseTableRow* MetaData = UNAItemEngineSubsystem::Get()->FindItemMetaData(GetClass());
 	if (!MetaData) return;
 
 	const EItemSubobjDirtyFlags DirtyFlags = GetDirtySubobjectFlags(MetaData);
@@ -476,8 +614,20 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 				if (UShapeComponent* NewItemCollision = Cast<UShapeComponent>(OwnedActorComp))
 				{
 					ItemCollision = NewItemCollision;
-					ItemCollision->SetRelativeLocation(FVector::ZeroVector);
-					ItemCollision->SetRelativeRotation(FRotator::ZeroRotator);
+					if (USphereComponent* SphereCollision = Cast<USphereComponent>(ItemCollision))
+					{
+						SphereCollision->SetSphereRadius(MetaData->CollisionSphereRadius);
+					}
+					else if (UBoxComponent* BoxCollision = Cast<UBoxComponent>(ItemCollision))
+					{
+						BoxCollision->SetBoxExtent(MetaData->CollisionBoxExtent);
+					}
+					else if (UCapsuleComponent* CapsuleCollision = Cast<UCapsuleComponent>(ItemCollision))
+					{
+						CapsuleCollision->SetCapsuleSize(
+							MetaData->CollisionCapsuleSize.X, MetaData->CollisionCapsuleSize.Y);
+					}
+					ItemCollision->SetRelativeTransform(FTransform::Identity);
 				}
 			}
 			if (bNeedItemMesh && NewItemMeshClass
@@ -487,11 +637,23 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 				if (UMeshComponent* NewItemMesh = Cast<UMeshComponent>(OwnedActorComp))
 				{
 					ItemMesh = NewItemMesh;
+					if (UStaticMeshComponent* StaticMeshComp = Cast<UStaticMeshComponent>(ItemMesh))
+					{
+						StaticMeshComp->SetStaticMesh(MetaData->StaticMeshAssetData.StaticMesh);
+						ItemFractureCollection = MetaData->StaticMeshAssetData.FractureCollection;
+						ItemFractureCache = MetaData->StaticMeshAssetData.FractureCache;
+						ItemMesh->SetRelativeTransform(MetaData->StaticMeshAssetData.StaticMeshTransform);
+					}
+					else if (USkeletalMeshComponent* SkeletalMeshComp = Cast<USkeletalMeshComponent>(ItemMesh))
+					{
+						SkeletalMeshComp->SetSkeletalMesh(MetaData->SkeletalMeshAssetData.SkeletalMesh);
+						SkeletalMeshComp->SetAnimClass(MetaData->SkeletalMeshAssetData.AnimClass);
+						ItemMesh->SetRelativeTransform(MetaData->SkeletalMeshAssetData.SkeletalMeshTransform);
+					}
 				}
 			}
 		}
 		
-#if WITH_EDITOR
 		if (UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(GetClass()))
 		{
 			TArray<USCS_Node*> SCSNodes =  BPGC->SimpleConstructionScript->GetAllNodes();
@@ -534,7 +696,6 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 				}
 			}
 		}
-#endif
 	}
 	
 	// 부모, 자식에서 Property로 설정된 컴포넌트들을 조회
@@ -568,23 +729,43 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 	}
 }
 
-#if WITH_EDITOR || WITH_EDITORONLY_DATA
 void ANAItemActor::EnsureForceNonDataOnlyVariableUsed()
 {
-	if (HasActorBegunPlay())
+	if (GetWorld() && GetWorld()->IsPlayInEditor())
 	{
-		UE_LOG(NAItem, Warning, TEXT("[%hs] BeginPlay 이후에 호출됨!"), __FUNCTION__);
+		UE_LOG(NAItem, Warning,
+			TEXT("[%hs] 잘못된 호출: PIE 실행 중 호출됨"), __FUNCTION__);
 		return;
 	}
 
-	// 메타데이터 기반으로 아이템 액터 클래스 동적 초기화할 때 1번만 실행
-	// @see: NAItemEngineSubsystem.cpp - Line 88
-	if (!UNAItemEngineSubsystem::Get()
-		|| UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized())
+	if (!HasAnyFlags(RF_ClassDefaultObject))
+	{
+		UE_LOG(NAItem, Warning,
+			TEXT("[%hs] 잘못된 호출: CDO 외 객체에서 호출됨"), __FUNCTION__);
 		return;
+	}
+
+	if (!UNAItemEngineSubsystem::Get())
+	{
+		UE_LOG(NAItem, Warning,
+			TEXT("[%hs] 아이템 엔진 서브시스템 미초기화 상태"), __FUNCTION__);
+		return;
+	}
+
+	if (!UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(GetClass()))
+	{
+		UE_LOG(NAItem, Warning,
+			TEXT("[%hs] 비등록 아이템 클래스에서 호출됨"), __FUNCTION__);
+		return;
+	}
 
 	UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass()));
-	if (!BP) return;
+	if (!BP)
+	{
+		UE_LOG(NAItem, Warning,
+			TEXT("[%hs] 블루프린트 클래스 아님"), __FUNCTION__);
+		return;
+	}
 
 	if (BP->bRunConstructionScriptOnDrag)
 	{
@@ -640,8 +821,16 @@ void ANAItemActor::EnsureForceNonDataOnlyVariableUsed()
 							bForceNonDataOnlyBlueprint = NewGetterNode ? true : false;
 						}
 					}
+					else
+					{
+						bForceNonDataOnlyBlueprint = true;
+					}
 				}
 			}
+		}
+		if (bForceNonDataOnlyBlueprint)
+		{
+			BP->MarkPackageDirty();
 		}
 	}
 }
@@ -651,8 +840,24 @@ void ANAItemActor::OnConstruction(const FTransform& Transform)
 {
  	Super::OnConstruction(Transform);
 	
+#if WITH_EDITOR
 	ReconstructItemSubobjectsFromMetaData();
+#endif
 	InitItemData();
+}
+
+void ANAItemActor::InitItemData()
+{
+	// CDO 또는 프리뷰 액터 또는 Child Actor인 경우: 새로운 아이템 데이터 인스턴스 생성 안함
+	if (HasAnyFlags(RF_ClassDefaultObject)
+		|| (GetWorld() && GetWorld()->IsPreviewWorld()) || IsChildActor()) return;
+	if (HasValidItemID()) return;
+	
+	if (const UNAItemData* NewItemData = UNAItemEngineSubsystem::Get()->CreateItemDataByActor(this))
+	{
+		ItemDataID = NewItemData->GetItemID();
+		VerifyInteractableData();
+	}
 }
 
 void ANAItemActor::Destroyed()
@@ -687,18 +892,55 @@ void ANAItemActor::GetLifetimeReplicatedProps( TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME( ANAItemActor, bWasChildActor );
 }
 
-void ANAItemActor::InitItemData()
+void ANAItemActor::PreSave(FObjectPreSaveContext SaveContext)
 {
-	// CDO 또는 프리뷰 액터 또는 Child Actor인 경우: 새로운 아이템 데이터 인스턴스 생성 안함
-	if (HasAnyFlags(RF_ClassDefaultObject)
-		|| (GetWorld() && GetWorld()->IsPreviewWorld()) || IsChildActor()) return;
-	if (HasValidItemID()) return;
-	
-	if (const UNAItemData* NewItemData = UNAItemEngineSubsystem::Get()->CreateItemDataByActor(this))
+	Super::PreSave(SaveContext);
+#if WITH_EDITOR
+	if (UNAItemEngineSubsystem::Get()
+		&& UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(GetClass()))
 	{
-		ItemDataID = NewItemData->GetItemID();
-		VerifyInteractableData();
+		if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
+		{
+			bool bShouldAddDummyNode = true;
+			TArray<UEdGraph*> Graphs;
+			BP->GetAllGraphs(Graphs);
+			if (Graphs.Num() > 0)
+			{
+				for (UEdGraph* Graph : Graphs)
+				{
+					if (Graph->GetName().Equals(TEXT("EventGraph")))
+					{
+						TArray<UEdGraphNode*> GNodes = Graph->Nodes;
+						if (GNodes.Num() > 0)
+						{
+							for (UEdGraphNode* GNode : GNodes)
+							{
+								if (UK2Node_Variable* VarNode = Cast<UK2Node_Variable>(GNode))
+								{
+									bShouldAddDummyNode
+										= !VarNode->GetVarNameString().Equals(TEXT("bForceNonDataOnlyBlueprint"));
+									if (!bShouldAddDummyNode) break;
+								}
+							}
+						}
+					}
+				}
+			}
+			if (bShouldAddDummyNode)
+			{
+				bForceNonDataOnlyBlueprint = false;
+			}
+		}
+		
+		if (HasAnyFlags(RF_ClassDefaultObject)
+			&& GetClass()->HasAllClassFlags(CLASS_CompiledFromBlueprint)
+			&& !SaveContext.IsProceduralSave())
+		{
+			BackupItemSubobjectPropertiesToMetaData();
+			UNAItemEngineSubsystem::Get()->SaveMetaDataTable(GetClass());
+		}
 	}
+#endif
 }
 
 void ANAItemActor::VerifyInteractableData()

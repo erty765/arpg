@@ -71,7 +71,7 @@ void ANAWeapon::BeginPlay()
 			{
 				SetOwner( OwningActor );
 
-				if ( const FNAWeaponTableRow* WeaponTable = static_cast<const FNAWeaponTableRow*>( UNAItemEngineSubsystem::Get()->GetItemMetaDataByClass( GetClass() ) ) )
+				if ( const FNAWeaponTableRow* WeaponTable = static_cast<const FNAWeaponTableRow*>( UNAItemEngineSubsystem::Get()->FindItemMetaData( GetClass() ) ) )
 				{
 					// 부착된 상태에서 오프셋 조정
 					// 액터는 초기에 생성된 시점에서 ChildActorComponent에 부착된 상태가 아니라서
@@ -112,7 +112,7 @@ void ANAWeapon::OnConstruction( const FTransform& Transform )
 {
 	Super::OnConstruction( Transform );
 	
-	if ( const FNAWeaponTableRow* WeaponTable = static_cast<const FNAWeaponTableRow*>( UNAItemEngineSubsystem::Get()->GetItemMetaDataByClass( GetClass() ) ) )
+	if ( const FNAWeaponTableRow* WeaponTable = static_cast<const FNAWeaponTableRow*>( UNAItemEngineSubsystem::Get()->FindItemMetaData( GetClass() ) ) )
 	{
 		FireArmType = WeaponTable->FirearmStatistics.FireArmType;
 	}

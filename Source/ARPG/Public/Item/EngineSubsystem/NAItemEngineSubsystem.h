@@ -36,34 +36,6 @@ protected:
    virtual void Deinitialize() override;
     
 public:
-#if WITH_EDITOR
-   bool IsRegisteredItemMetaClass(UClass* ItemClass) const;
-   void RegisterNewItemMetaData(UClass* NewItemClass, const UDataTable* InDataTable, const FName InRowName);
-   void VerifyItemMetaDataRowHandle(UClass* ItemClass, const UDataTable* InDataTable, const FName InRowName);
-
-   // WITH_EDITOR 전용
-   template<typename ItemDTRow_T = FNAItemBaseTableRow>
-      requires TIsDerivedFrom<ItemDTRow_T, FNAItemBaseTableRow>::IsDerived
-   ItemDTRow_T* GetItemMetaDataStructs(UClass* InItemActorClass) const
-   {
-      if (!InItemActorClass->IsChildOf<ANAItemActor>()) return nullptr;
-      if (!IsItemMetaDataInitialized()) return nullptr;
-      
-      UClass* Key = InItemActorClass;
-      if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(InItemActorClass)))
-      {
-         Key = BP->GeneratedClass.Get();
-      }
-      Key = Key ? Key : InItemActorClass;
-
-      if (const FDataTableRowHandle* Value = ItemMetaDataMap.Find(Key))
-      {
-         return Value->GetRow<ItemDTRow_T>(Value->RowName.ToString());
-      }
-      return nullptr;
-   }
-#endif
-
    static UNAItemEngineSubsystem* Get()
    {
       if (GEngine)
@@ -78,9 +50,26 @@ public:
       return bSoftMetaDataInitialized && bMetaDataInitialized;
    }
 
+#if WITH_EDITOR
+   bool IsRegisteredItemMetaClass(UClass* ItemClass) const;
+   void RegisterNewItemMetaData(UClass* NewItemClass, const UDataTable* InDataTable, const FName InRowName);
+   void VerifyItemMetaDataRowHandle(UClass* ItemClass, const UDataTable* InDataTable, const FName InRowName);
+
+   // WITH_EDITOR 전용
    template<typename ItemDTRow_T = FNAItemBaseTableRow>
       requires TIsDerivedFrom<ItemDTRow_T, FNAItemBaseTableRow>::IsDerived
-   const ItemDTRow_T* GetItemMetaDataByClass(UClass* ItemClass) const
+   ItemDTRow_T* FindItemMetaDataForEditing(UClass* ItemClass) const
+   {
+      return  const_cast<ItemDTRow_T*>(FindItemMetaData<ItemDTRow_T>(ItemClass));
+   }
+
+   void MarkMetaDataTableDirty(UClass* ItemClass) const;
+   void SaveMetaDataTable(UClass* ItemClass) const;
+#endif
+
+   template<typename ItemDTRow_T = FNAItemBaseTableRow>
+      requires TIsDerivedFrom<ItemDTRow_T, FNAItemBaseTableRow>::IsDerived
+   const ItemDTRow_T* FindItemMetaData(UClass* ItemClass) const
    {
       if (!ItemClass->IsChildOf<ANAItemActor>()) return nullptr;
       if (!IsSoftItemMetaDataInitialized()) return nullptr;
@@ -102,7 +91,7 @@ public:
       }
       else
       {
-         if (const FDataTableRowHandle* Value = ItemMetaDataMap.Find(Key))
+         if (const FDataTableRowHandle* Value = ItemMetaData.Find(Key))
          {
             return Value->GetRow<ItemDTRow_T>(Value->RowName.ToString());
          }
@@ -132,7 +121,7 @@ public:
       UClass* ItemClass = ItemActor->GetClass();
 
       // 1) 아이템 메타데이터 검색
-      const TMap<TSubclassOf<ANAItemActor>, FDataTableRowHandle>::ValueType* ValuePtr = ItemMetaDataMap.Find(ItemClass);
+      const TMap<TSubclassOf<ANAItemActor>, FDataTableRowHandle>::ValueType* ValuePtr = ItemMetaData.Find(ItemClass);
       if (!ValuePtr)
       {
          ensureAlwaysMsgf(false,
@@ -220,7 +209,7 @@ protected:
 #if WITH_EDITOR
    void HandlePostEngineInit();
 #endif
-       
+   
 private:
    // 실제 사용할 DataTable 포인터 보관
    UPROPERTY()
@@ -234,7 +223,7 @@ private:
     
    // 메타데이터 매핑
    UPROPERTY()
-   TMap<TSubclassOf<ANAItemActor>, FDataTableRowHandle> ItemMetaDataMap;
+   TMap<TSubclassOf<ANAItemActor>, FDataTableRowHandle> ItemMetaData;
     
    UPROPERTY()
    uint8 bMetaDataInitialized : 1 = false;

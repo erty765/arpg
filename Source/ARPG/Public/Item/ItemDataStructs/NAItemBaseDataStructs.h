@@ -60,7 +60,7 @@ struct ARPG_API FNAStaticMeshItemAssetData
 	UPROPERTY(EditAnywhere, Category = "Static Mesh Item Asset Data")
 	TObjectPtr<UStaticMesh> StaticMesh = nullptr;
 
-	UPROPERTY()
+	UPROPERTY(VisibleAnywhere, Category = "Static Mesh Item Asset Data")
 	FTransform StaticMeshTransform = FTransform::Identity;
 
 	// (선택) Fracture Geometry Collection 에셋
@@ -80,8 +80,8 @@ struct FNASkeletalMeshItemAssetData
 	UPROPERTY(EditAnywhere, Category = "Skeletal Mesh Item Asset Data")
 	TObjectPtr<USkeletalMesh> SkeletalMesh = nullptr;
 
-	UPROPERTY()
-	FTransform SKeletalMeshTransform = FTransform::Identity;
+	UPROPERTY(VisibleAnywhere, Category = "Skeletal Mesh Item Asset Data")
+	FTransform SkeletalMeshTransform = FTransform::Identity;
 
 	// @TODO: 아이템 전용 애님 클래스 만들기?
 	UPROPERTY(EditAnywhere, Category = "Skeletal Mesh Item Asset Data")
@@ -163,10 +163,23 @@ struct ARPG_API FNAItemBaseTableRow : public FTableRowBase
 	// 휴먼 에러 주의(c++ 네이티브 클래스 선택하지 말 것)
 	UPROPERTY(EditAnywhere, Category = "Item Base Data", meta=(BlueprintBaseOnly, AllowAbstract="false"))
 	TSoftClassPtr<ANAItemActor> ItemClass = nullptr;
-	
+
+	/* ANAItemActor의 콜리전 모양*/
 	// None: 기본 생성자에서 DoNotCreateSubobject로 ItemCollision 생성 수정한 경우!! 반다시!! 이 플래그 써야함
 	UPROPERTY(EditAnywhere, Category = "Item Collision Shape")
 	EItemCollisionShape CollisionShape = EItemCollisionShape::ICS_None;
+
+	UPROPERTY(VisibleAnywhere, Category = "Item Collision Shape",
+		meta=(EditCondition="CollisionShape == EItemCollisionShape::ICS_Sphere", EditConditionHides, ClampMin= "0.0"))
+	float CollisionSphereRadius = 0.f;
+
+	UPROPERTY(VisibleAnywhere, Category = "Item Collision Shape",
+		meta=(EditCondition="CollisionShape == EItemCollisionShape::ICS_Box", EditConditionHides, ClampMin= "0.0"))
+	FVector CollisionBoxExtent = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, Category = "Item Collision Shape",
+		meta=(EditCondition="CollisionShape == EItemCollisionShape::ICS_Capsule", EditConditionHides, ClampMin= "0.0"))
+	FVector2D CollisionCapsuleSize = FVector2D::ZeroVector;
 	
 	/* ANAItemActor의 메쉬 타입*/
 	// None: 기본 생성자에서 DoNotCreateSubobject로 ItemMesh 생성 수정한 경우!! 반다시!! 이 플래그 써야함
