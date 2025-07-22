@@ -3,10 +3,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include <functional>
 
 class FARPGModule : public FDefaultGameModuleImpl
 {
-	virtual void StartupModule() override;
 };
 
 

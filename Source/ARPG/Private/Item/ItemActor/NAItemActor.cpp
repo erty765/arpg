@@ -602,20 +602,6 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 				if (UShapeComponent* NewItemCollision = Cast<UShapeComponent>(OwnedActorComp))
 				{
 					ItemCollision = NewItemCollision;
-					if (USphereComponent* SphereCollision = Cast<USphereComponent>(ItemCollision))
-					{
-						SphereCollision->SetSphereRadius(MetaData->CollisionSphereRadius);
-					}
-					else if (UBoxComponent* BoxCollision = Cast<UBoxComponent>(ItemCollision))
-					{
-						BoxCollision->SetBoxExtent(MetaData->CollisionBoxExtent);
-					}
-					else if (UCapsuleComponent* CapsuleCollision = Cast<UCapsuleComponent>(ItemCollision))
-					{
-						CapsuleCollision->SetCapsuleSize(
-							MetaData->CollisionCapsuleSize.X, MetaData->CollisionCapsuleSize.Y);
-					}
-					ItemCollision->SetRelativeTransform(FTransform::Identity);
 				}
 			}
 			if (bNeedItemMesh && NewItemMeshClass
@@ -625,19 +611,6 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 				if (UMeshComponent* NewItemMesh = Cast<UMeshComponent>(OwnedActorComp))
 				{
 					ItemMesh = NewItemMesh;
-					if (UStaticMeshComponent* StaticMeshComp = Cast<UStaticMeshComponent>(ItemMesh))
-					{
-						StaticMeshComp->SetStaticMesh(MetaData->StaticMeshAssetData.StaticMesh);
-						ItemFractureCollection = MetaData->StaticMeshAssetData.FractureCollection;
-						ItemFractureCache = MetaData->StaticMeshAssetData.FractureCache;
-						ItemMesh->SetRelativeTransform(MetaData->StaticMeshAssetData.StaticMeshTransform);
-					}
-					else if (USkeletalMeshComponent* SkeletalMeshComp = Cast<USkeletalMeshComponent>(ItemMesh))
-					{
-						SkeletalMeshComp->SetSkeletalMesh(MetaData->SkeletalMeshAssetData.SkeletalMesh);
-						SkeletalMeshComp->SetAnimClass(MetaData->SkeletalMeshAssetData.AnimClass);
-						ItemMesh->SetRelativeTransform(MetaData->SkeletalMeshAssetData.SkeletalMeshTransform);
-					}
 				}
 			}
 		}
@@ -669,23 +642,59 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 					}
 				}
 			}
-			
-			if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
-			{
-				if (!BP->IsPossiblyDirty())
-				{
-					FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
-					FKismetEditorUtilities::CompileBlueprint(
-						BP,
-						EBlueprintCompileOptions::SkipSave
-						| EBlueprintCompileOptions::SkipGarbageCollection
-						| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
-					);
-				}
-			}
+		}
+	}
+
+	if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionProperties))
+	{
+		if (USphereComponent* SphereCollision = Cast<USphereComponent>(ItemCollision))
+		{
+			SphereCollision->SetSphereRadius(MetaData->CollisionSphereRadius);
+		}
+		else if (UBoxComponent* BoxCollision = Cast<UBoxComponent>(ItemCollision))
+		{
+			BoxCollision->SetBoxExtent(MetaData->CollisionBoxExtent);
+		}
+		else if (UCapsuleComponent* CapsuleCollision = Cast<UCapsuleComponent>(ItemCollision))
+		{
+			CapsuleCollision->SetCapsuleSize(
+				MetaData->CollisionCapsuleSize.X, MetaData->CollisionCapsuleSize.Y);
+		}
+		ItemCollision->SetRelativeTransform(FTransform::Identity);
+	}
+	if (EnumHasAnyFlags(DirtyFlags,EItemSubobjDirtyFlags::ISDF_MeshProperties))
+	{
+		if (UStaticMeshComponent* StaticMeshComp = Cast<UStaticMeshComponent>(ItemMesh))
+		{
+			StaticMeshComp->SetStaticMesh(MetaData->StaticMeshAssetData.StaticMesh);
+			ItemFractureCollection = MetaData->StaticMeshAssetData.FractureCollection;
+			ItemFractureCache = MetaData->StaticMeshAssetData.FractureCache;
+			ItemMesh->SetRelativeTransform(MetaData->StaticMeshAssetData.StaticMeshTransform);
+		}
+		if (USkeletalMeshComponent* SkeletalMeshComp = Cast<USkeletalMeshComponent>(ItemMesh))
+		{
+			SkeletalMeshComp->SetSkeletalMesh(MetaData->SkeletalMeshAssetData.SkeletalMesh);
+			SkeletalMeshComp->SetAnimClass(MetaData->SkeletalMeshAssetData.AnimClass);
+			ItemMesh->SetRelativeTransform(MetaData->SkeletalMeshAssetData.SkeletalMeshTransform);
 		}
 	}
 	
+	if (DirtyFlags != EItemSubobjDirtyFlags::ISDF_None)
+	{
+		if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
+		{
+			if (!BP->IsPossiblyDirty())
+			{
+				FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
+				FKismetEditorUtilities::CompileBlueprint(
+					BP,
+					EBlueprintCompileOptions::SkipSave
+					| EBlueprintCompileOptions::SkipGarbageCollection
+					| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
+				);
+			}
+		}
+	}
 	// 부모, 자식에서 Property로 설정된 컴포넌트들을 조회
 	// 최종적으로 프로퍼티에 남은 컴포넌트 주소들을 확인
 	TSet<UActorComponent*> ItemActorSubobjects;

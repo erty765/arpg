@@ -50,13 +50,3 @@ static FAutoConsoleCommandWithWorldAndArgs SmiteCommand(
 		}
 	})
 );
-
-void ARPGModule::StartupModule()
-{
-	FDefaultGameModuleImpl::StartupModule();
-
-#if WITH_EDITOR
-	NAHideableGraphNodeFactory = MakeShareable(new FNAHideableGraphPanelNodeFactory());
-	FEdGraphUtilities::RegisterVisualNodeFactory(NAHideableGraphNodeFactory);
-#endif
-}

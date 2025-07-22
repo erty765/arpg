@@ -1,5 +1,6 @@
 #include "Item/ItemActor/NAPickableItemActor.h"
 
+#include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
 #include "Components/SphereComponent.h"
 #include "Interaction/NAInteractionComponent.h"
 

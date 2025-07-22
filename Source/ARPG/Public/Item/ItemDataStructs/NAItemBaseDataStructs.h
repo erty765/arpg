@@ -171,15 +171,19 @@ struct ARPG_API FNAItemBaseTableRow : public FTableRowBase
 
 	UPROPERTY(VisibleAnywhere, Category = "Item Collision Shape",
 		meta=(EditCondition="CollisionShape == EItemCollisionShape::ICS_Sphere", EditConditionHides, ClampMin= "0.0"))
-	float CollisionSphereRadius = 0.f;
+	float CollisionSphereRadius = 32.f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Item Collision Shape",
 		meta=(EditCondition="CollisionShape == EItemCollisionShape::ICS_Box", EditConditionHides, ClampMin= "0.0"))
-	FVector CollisionBoxExtent = FVector::ZeroVector;
+	FVector CollisionBoxExtent = FVector(32.f, 32.f, 32.f);
 
+	/**
+	 * X: Capsule radius
+	 * Y: Capsule half height
+	 */
 	UPROPERTY(VisibleAnywhere, Category = "Item Collision Shape",
 		meta=(EditCondition="CollisionShape == EItemCollisionShape::ICS_Capsule", EditConditionHides, ClampMin= "0.0"))
-	FVector2D CollisionCapsuleSize = FVector2D::ZeroVector;
+	FVector2D CollisionCapsuleSize = FVector2D(22.f, 44.f);
 	
 	/* ANAItemActor의 메쉬 타입*/
 	// None: 기본 생성자에서 DoNotCreateSubobject로 ItemMesh 생성 수정한 경우!! 반다시!! 이 플래그 써야함

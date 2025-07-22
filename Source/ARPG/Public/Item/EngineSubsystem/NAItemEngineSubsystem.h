@@ -185,6 +185,14 @@ private:
    // 메타데이터 매핑
    UPROPERTY()
    TMap<TSubclassOf<ANAItemActor>, FDataTableRowHandle> ItemMetaData;
+
+#if WITH_EDITORONLY_DATA
+   // 에디터 런타임 중 메타데이터 편집할 때 사용할 인스턴스
+   // uint8*: ItemMetaData의 Value가 가리키는 RowStruct
+   // FDataTableRowHandle*: ItemMetaData의 Value를 가리키는 포인터
+   // GetRowMap()->FindKey(uint8*)으로 Row Name 가져와서 ItemMetaData[Key].RowName 변경하기
+   TMap<uint8*, FDataTableRowHandle*> ItemMetaDataBuffer;
+#endif
     
    UPROPERTY()
    uint8 bMetaDataInitialized : 1 = false;
