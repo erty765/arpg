@@ -41,6 +41,11 @@ public class ARPG : ModuleRules
 				"KismetCompiler",
 				"BlueprintGraph"
 			});
+			
+			PrivateDependencyModuleNames.AddRange(new string[]
+			{
+				"ARPGEditor"
+			});
 		}
 	}
 }

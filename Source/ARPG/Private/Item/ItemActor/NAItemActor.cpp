@@ -7,6 +7,8 @@
 #include "Components/CapsuleComponent.h"
 #include "Interaction/NAInteractionComponent.h"
 #include "GeometryCollection/GeometryCollectionObject.h"
+#include "Item/ItemSubsystemEditorUtility.h"
+#include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
 #include "Item/ItemWidget/NAItemWidgetComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Item/ItemWidget/NAItemWidget.h"
@@ -17,7 +19,7 @@
 #include "Engine/SimpleConstructionScript.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
-#include "K2Node_VariableGet.h"
+#include "NABlueprintGraphNode/NAHideableGraphNode_VariableGet.h"
 #include "BlueprintVariableNodeSpawner.h"
 #endif
 
@@ -175,7 +177,7 @@ void ANAItemActor::PostLoad()
 	if (!UNAItemEngineSubsystem::Get()) return;
 #if WITH_EDITOR
 	// 메타데이터 인스턴싱 도중 로드된 경우
-	if (UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(GetClass())
+	if (FItemSubsystemEditorUtility::IsRegisteredItemMetaClass(GetClass())
 		&& !UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized())
 	{
 		BackupItemSubobjectPropertiesToMetaData();
@@ -398,10 +400,9 @@ void ANAItemActor::BackupItemSubobjectPropertiesToMetaData() const
 {
 	if (!HasAnyFlags(RF_ClassDefaultObject)) return;
 
-	if (!UNAItemEngineSubsystem::Get()
-		|| !UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(GetClass())) return;
+	if (!FItemSubsystemEditorUtility::IsRegisteredItemMetaClass(GetClass())) return;
     
-    FNAItemBaseTableRow* MetaData = UNAItemEngineSubsystem::Get()->FindItemMetaDataForEditing(GetClass());
+    FNAItemBaseTableRow* MetaData = FItemSubsystemEditorUtility::FindItemMetaDataForEditing(GetClass());
     if (!MetaData) return;
     
     const EItemSubobjDirtyFlags CDODirtyFlags = GetDirtySubobjectFlags(MetaData);
@@ -480,17 +481,8 @@ void ANAItemActor::BackupItemSubobjectPropertiesToMetaData() const
             }
         }
     }
-	UNAItemEngineSubsystem::Get()->MarkMetaDataTableDirty(GetClass());
-}
-
-void ANAItemActor::PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent)
-{
-	Super::PostEditChangeProperty(PropertyChangedEvent);
-}
-
-void ANAItemActor::PostEditChangeChainProperty(struct FPropertyChangedChainEvent& PropertyChangedEvent)
-{
-	Super::PostEditChangeChainProperty(PropertyChangedEvent);
+	
+	FItemSubsystemEditorUtility::MarkMetaDataTableDirty(GetClass());
 }
 
 void ANAItemActor::PostCDOCompiled(const FPostCDOCompiledContext& Context)
@@ -509,9 +501,7 @@ void ANAItemActor::PostCDOCompiled(const FPostCDOCompiledContext& Context)
 
 void ANAItemActor::HandleItemClassRegisteredToMetaData()
 {
-	if (!UNAItemEngineSubsystem::Get()) return;
-
-	if (UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(GetClass()))
+	if (FItemSubsystemEditorUtility::IsRegisteredItemMetaClass(GetClass()))
 	{
 		EnsureForceNonDataOnlyVariableUsed();
 		HandleOnItemClassRegisteredToMetaData_Impl();
@@ -539,9 +529,7 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 {
 	if (GetWorld() && GetWorld()->HasBegunPlay()) return;
 	
-	if (!UNAItemEngineSubsystem::Get()) return;
-
-	if (!UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(GetClass())
+	if (!FItemSubsystemEditorUtility::IsRegisteredItemMetaClass(GetClass())
 		|| !UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized()) return;
 	
 	const FNAItemBaseTableRow* MetaData = UNAItemEngineSubsystem::Get()->FindItemMetaData(GetClass());
@@ -752,7 +740,7 @@ void ANAItemActor::EnsureForceNonDataOnlyVariableUsed()
 		return;
 	}
 
-	if (!UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(GetClass()))
+	if (!FItemSubsystemEditorUtility::IsRegisteredItemMetaClass(GetClass()))
 	{
 		UE_LOG(NAItem, Warning,
 			TEXT("[%hs] 비등록 아이템 클래스에서 호출됨"), __FUNCTION__);
@@ -811,13 +799,18 @@ void ANAItemActor::EnsureForceNonDataOnlyVariableUsed()
 						{
 							UBlueprintVariableNodeSpawner* GetterSpawner
 								= UBlueprintVariableNodeSpawner::CreateFromMemberOrParam(
-									UK2Node_VariableGet::StaticClass()
+									UNAHideableGraphNode_VariableGet::StaticClass()
 									, Property);
 							check(GetterSpawner != nullptr);
 							UEdGraphNode* NewGetterNode = GetterSpawner->Invoke(
 								Graph
 								, IBlueprintNodeBinder::FBindingSet()
 								, FVector2D(0.f, -10.f));
+							if (INAHideableGraphNodeInterface* HideableGetterNode
+								= Cast<INAHideableGraphNodeInterface>(NewGetterNode))
+							{
+								HideableGetterNode->SetHiddenFromEditor(true);
+							}
 							bForceNonDataOnlyBlueprint = NewGetterNode ? true : false;
 						}
 					}
@@ -897,9 +890,9 @@ void ANAItemActor::PreSave(FObjectPreSaveContext SaveContext)
 	Super::PreSave(SaveContext);
 #if WITH_EDITOR
 	if (UNAItemEngineSubsystem::Get()
-		&& UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(GetClass()))
+		&& FItemSubsystemEditorUtility::IsRegisteredItemMetaClass(GetClass()))
 	{
-		if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
+		/*if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
 		{
 			bool bShouldAddDummyNode = true;
 			TArray<UEdGraph*> Graphs;
@@ -930,14 +923,14 @@ void ANAItemActor::PreSave(FObjectPreSaveContext SaveContext)
 			{
 				bForceNonDataOnlyBlueprint = false;
 			}
-		}
+		}*/
 		
 		if (HasAnyFlags(RF_ClassDefaultObject)
 			&& GetClass()->HasAllClassFlags(CLASS_CompiledFromBlueprint)
 			&& !SaveContext.IsProceduralSave())
 		{
 			BackupItemSubobjectPropertiesToMetaData();
-			UNAItemEngineSubsystem::Get()->SaveMetaDataTable(GetClass());
+			FItemSubsystemEditorUtility::SaveMetaDataTable(GetClass());
 		}
 	}
 #endif
@@ -1062,6 +1055,75 @@ UNAItemData* ANAItemActor::GetItemData() const
 bool ANAItemActor::HasValidItemID() const
 {
 	return !ItemDataID.IsNone();
+}
+
+void ANAItemActor::MigrateItemStateFromChildActor(ANAItemActor* SourceChildActor, ANAItemActor* TargetActor)
+{
+	if ( UNAItemEngineSubsystem::Get() && SourceChildActor && TargetActor)
+	{
+		if (ensureAlwaysMsgf(SourceChildActor->IsChildActor() && SourceChildActor->HasValidItemID()
+		                     && !TargetActor->IsChildActor() && TargetActor->HasValidItemID(),
+		                     TEXT(
+			                     "[MigrateItemStateFromChildActor]  ")))
+		{
+			if (UNAItemEngineSubsystem::Get()->DestroyRuntimeItem(TargetActor->ItemDataID))
+			{
+				TargetActor->ItemDataID = SourceChildActor->ItemDataID;
+				if (SourceChildActor->InteractableInterfaceRef && TargetActor->InteractableInterfaceRef)
+				{
+					INAInteractableInterface::TransferInteractableStateToChildActor(
+						SourceChildActor->InteractableInterfaceRef
+						, TargetActor->InteractableInterfaceRef);
+				}
+
+				if (UChildActorComponent* ChildActorComponent =
+					Cast<UChildActorComponent>(SourceChildActor->GetParentComponent()))
+				{
+					SourceChildActor->ItemDataID = NAME_None;
+					ChildActorComponent->DestroyChildActor();
+					ChildActorComponent->SetChildActorClass(nullptr);
+				}
+			}
+		}
+	}
+}
+
+void ANAItemActor::MigrateItemStateToChildActor(ANAItemActor* SourceActor, ANAItemActor* TargetChildActor)
+{
+	if (SourceActor && TargetChildActor)
+	{
+		if (ensureAlwaysMsgf(!SourceActor->IsChildActor() && SourceActor->HasValidItemID()
+		                     && TargetChildActor->IsChildActor() && !TargetChildActor->HasValidItemID(),
+		                     TEXT(
+			                     "[MigrateItemStateToChildActor]  ChildActorComponent에 의해 생성된 아이템 액터에 새로 생성된 아이템 데이터가 있었음")))
+		{
+			TargetChildActor->ItemDataID = SourceActor->ItemDataID;
+			if (SourceActor->InteractableInterfaceRef && TargetChildActor->InteractableInterfaceRef)
+			{
+				INAInteractableInterface::TransferInteractableStateToChildActor(
+					SourceActor->InteractableInterfaceRef
+					, TargetChildActor->InteractableInterfaceRef);
+			}
+
+			SourceActor->ItemDataID = NAME_None;
+			SourceActor->Destroy();
+		}
+	}
+}
+
+void ANAItemActor::AssignItemDataToChildActor(UNAItemData* ItemData, ANAItemActor* TargetChildActor)
+{
+	if (ItemData && !ItemData->GetItemID().IsNone() && TargetChildActor)
+	{
+		ensureAlwaysMsgf(TargetChildActor->IsChildActor() && !TargetChildActor->HasValidItemID(),
+		                 TEXT(
+			                 "[AssignItemDataToChildActor]  ChildActorComponent에 의해 생성된 아이템 액터에 새로 생성된 아이템 데이터가 있었음"));
+		if (TargetChildActor->IsChildActor() && !TargetChildActor->GetItemData())
+		{
+			TargetChildActor->ItemDataID = ItemData->GetItemID();
+			TargetChildActor->VerifyInteractableData();
+		}
+	}
 }
 
 //======================================================================================================================

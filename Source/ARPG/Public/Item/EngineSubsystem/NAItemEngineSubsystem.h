@@ -28,6 +28,13 @@ class ARPG_API UNAItemEngineSubsystem : public UEngineSubsystem
 {
    GENERATED_BODY()
 
+#if WITH_EDITOR
+   friend class UNAItemEditorSubsystem;
+   friend struct FItemSubsystemEditorUtility;
+#endif
+
+   const FTableRowBase* FindItemMetaDataImpl(UClass* ItemClass) const;
+   
 public:
    UNAItemEngineSubsystem();
     
@@ -50,55 +57,13 @@ public:
       return bSoftMetaDataInitialized && bMetaDataInitialized;
    }
 
-#if WITH_EDITOR
-   bool IsRegisteredItemMetaClass(UClass* ItemClass) const;
-   void RegisterNewItemMetaData(UClass* NewItemClass, const UDataTable* InDataTable, const FName InRowName);
-   void VerifyItemMetaDataRowHandle(UClass* ItemClass, const UDataTable* InDataTable, const FName InRowName);
-
-   // WITH_EDITOR 전용
-   template<typename ItemDTRow_T = FNAItemBaseTableRow>
-      requires TIsDerivedFrom<ItemDTRow_T, FNAItemBaseTableRow>::IsDerived
-   ItemDTRow_T* FindItemMetaDataForEditing(UClass* ItemClass) const
-   {
-      return  const_cast<ItemDTRow_T*>(FindItemMetaData<ItemDTRow_T>(ItemClass));
-   }
-
-   void MarkMetaDataTableDirty(UClass* ItemClass) const;
-   void SaveMetaDataTable(UClass* ItemClass) const;
-#endif
-
    template<typename ItemDTRow_T = FNAItemBaseTableRow>
       requires TIsDerivedFrom<ItemDTRow_T, FNAItemBaseTableRow>::IsDerived
    const ItemDTRow_T* FindItemMetaData(UClass* ItemClass) const
    {
-      if (!ItemClass->IsChildOf<ANAItemActor>()) return nullptr;
-      if (!IsSoftItemMetaDataInitialized()) return nullptr;
-       
-      UClass* Key = ItemClass;
-#if WITH_EDITOR
-      if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(ItemClass)))
-      {
-         Key = BP->GeneratedClass.Get();
-      }
-      Key = Key ? Key : ItemClass;
-#endif
-      if (!IsItemMetaDataInitialized())
-      {
-         if (const FDataTableRowHandle* Value = SoftItemMetaData.Find(Key))
-         {
-            return Value->GetRow<ItemDTRow_T>(Value->RowName.ToString());
-         }
-      }
-      else
-      {
-         if (const FDataTableRowHandle* Value = ItemMetaData.Find(Key))
-         {
-            return Value->GetRow<ItemDTRow_T>(Value->RowName.ToString());
-         }
-      }
-      return nullptr;
+      return const_cast<ItemDTRow_T*>( static_cast<const ItemDTRow_T*>(FindItemMetaDataImpl(ItemClass)) );
    }
-
+   
    template<typename ItemActor_T = ANAItemActor>
       requires TIsDerivedFrom< ItemActor_T, ANAItemActor>::IsDerived
    const UNAItemData* CreateItemDataByActor(ItemActor_T* ItemActor)
@@ -205,10 +170,6 @@ protected:
    }
 
    FName CreateItemID(const FString& MetaDataRowName);
-
-#if WITH_EDITOR
-   void HandlePostEngineInit();
-#endif
    
 private:
    // 실제 사용할 DataTable 포인터 보관

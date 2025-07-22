@@ -1,4 +1,6 @@
 #include "Item/ItemDataStructs/NAItemBaseDataStructs.h"
+
+#include "Item/ItemSubsystemEditorUtility.h"
 #include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
 #include "Item/PickableItem/NAWeapon.h"
 #include "Item/PickableItem/NAPowerNode.h"
@@ -18,13 +20,13 @@ void FNAItemBaseTableRow::OnDataTableChanged(const UDataTable* InDataTable, cons
 	
 	if (UClass* ItemActorClass = ItemMetaDataStruct->ItemClass.Get())
 	{
-		if (!UNAItemEngineSubsystem::Get()->IsRegisteredItemMetaClass(ItemActorClass))
+		if (!FItemSubsystemEditorUtility::IsRegisteredItemMetaClass(ItemActorClass))
 		{
-			UNAItemEngineSubsystem::Get()->RegisterNewItemMetaData(ItemActorClass, InDataTable, InRowName);
+			FItemSubsystemEditorUtility::RegisterNewItemMetaData(ItemActorClass, InDataTable, InRowName);
 		}
 		else
 		{
-			UNAItemEngineSubsystem::Get()->VerifyItemMetaDataRowHandle(ItemActorClass, InDataTable, InRowName);
+			FItemSubsystemEditorUtility::VerifyItemMetaDataRowHandle(ItemActorClass, InDataTable, InRowName);
 		}
 	}
 

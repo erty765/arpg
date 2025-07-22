@@ -9,7 +9,7 @@
 #include "HP/GameplayEffect/NAGE_Damage.h"
 #include "Modules/ModuleManager.h"
 
-IMPLEMENT_PRIMARY_GAME_MODULE( FDefaultGameModuleImpl, ARPG, "ARPG" );
+IMPLEMENT_PRIMARY_GAME_MODULE( FARPGModule, ARPG, "ARPG" );
 
 static FAutoConsoleCommandWithWorldAndArgs SmiteCommand(
 	TEXT("smite"),
@@ -50,3 +50,13 @@ static FAutoConsoleCommandWithWorldAndArgs SmiteCommand(
 		}
 	})
 );
+
+void ARPGModule::StartupModule()
+{
+	FDefaultGameModuleImpl::StartupModule();
+
+#if WITH_EDITOR
+	NAHideableGraphNodeFactory = MakeShareable(new FNAHideableGraphPanelNodeFactory());
+	FEdGraphUtilities::RegisterVisualNodeFactory(NAHideableGraphNodeFactory);
+#endif
+}

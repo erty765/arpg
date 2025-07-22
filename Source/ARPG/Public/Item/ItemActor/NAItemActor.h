@@ -3,7 +3,6 @@
 #include "GameFramework/Actor.h"
 #include "Interaction/NAInteractableInterface.h"
 #include "Item/NAItemUseInterface.h"
-#include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
 #include "NAItemActor.generated.h"
 
 class UTextRenderComponent;
@@ -31,8 +30,13 @@ UCLASS(Abstract)
 class ARPG_API ANAItemActor : public AActor, public INAInteractableInterface, public INAItemUseInterface
 {
 	GENERATED_BODY()
-
+	
 	friend class UNAItemEngineSubsystem;
+#if WITH_EDITOR
+	friend class UNAItemEditorSubsystem;
+	friend struct FItemSubsystemEditorUtility;
+#endif
+	
 public:
 	ANAItemActor(const FObjectInitializer& ObjectInitializer);
 	virtual void PostInitProperties() override;
@@ -58,74 +62,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Item Actor")
 	bool HasValidItemID() const;
 
-	static void MigrateItemStateFromChildActor(ANAItemActor* SourceChildActor, ANAItemActor* TargetActor)
-	{
-		if ( UNAItemEngineSubsystem::Get() && SourceChildActor && TargetActor)
-		{
-			if (ensureAlwaysMsgf(SourceChildActor->IsChildActor() && SourceChildActor->HasValidItemID()
-				&& !TargetActor->IsChildActor() && TargetActor->HasValidItemID(),
-				TEXT(
-					"[MigrateItemStateFromChildActor]  ")))
-			{
-				if (UNAItemEngineSubsystem::Get()->DestroyRuntimeItem(TargetActor->ItemDataID))
-				{
-					TargetActor->ItemDataID = SourceChildActor->ItemDataID;
-					if (SourceChildActor->InteractableInterfaceRef && TargetActor->InteractableInterfaceRef)
-					{
-						INAInteractableInterface::TransferInteractableStateToChildActor(
-							SourceChildActor->InteractableInterfaceRef
-							, TargetActor->InteractableInterfaceRef);
-					}
-
-					if (UChildActorComponent* ChildActorComponent =
-						Cast<UChildActorComponent>(SourceChildActor->GetParentComponent()))
-					{
-						SourceChildActor->ItemDataID = NAME_None;
-						ChildActorComponent->DestroyChildActor();
-						ChildActorComponent->SetChildActorClass(nullptr);
-					}
-				}
-			}
-		}
-	}
-
-	static void MigrateItemStateToChildActor(ANAItemActor* SourceActor, ANAItemActor* TargetChildActor)
-	{
-		if (SourceActor && TargetChildActor)
-		{
-			if (ensureAlwaysMsgf(!SourceActor->IsChildActor() && SourceActor->HasValidItemID()
-				&& TargetChildActor->IsChildActor() && !TargetChildActor->HasValidItemID(),
-				TEXT(
-					"[MigrateItemStateToChildActor]  ChildActorComponent에 의해 생성된 아이템 액터에 새로 생성된 아이템 데이터가 있었음")))
-			{
-				TargetChildActor->ItemDataID = SourceActor->ItemDataID;
-				if (SourceActor->InteractableInterfaceRef && TargetChildActor->InteractableInterfaceRef)
-				{
-					INAInteractableInterface::TransferInteractableStateToChildActor(
-						SourceActor->InteractableInterfaceRef
-						, TargetChildActor->InteractableInterfaceRef);
-				}
-
-				SourceActor->ItemDataID = NAME_None;
-				SourceActor->Destroy();
-			}
-		}
-	}
-
-	static void AssignItemDataToChildActor(UNAItemData* ItemData, ANAItemActor* TargetChildActor)
-	{
-		if (ItemData && !ItemData->GetItemID().IsNone() && TargetChildActor)
-		{
-			ensureAlwaysMsgf(TargetChildActor->IsChildActor() && !TargetChildActor->HasValidItemID(),
-				TEXT(
-					"[AssignItemDataToChildActor]  ChildActorComponent에 의해 생성된 아이템 액터에 새로 생성된 아이템 데이터가 있었음"));
-			if (TargetChildActor->IsChildActor() && !TargetChildActor->GetItemData())
-			{
-				TargetChildActor->ItemDataID = ItemData->GetItemID();
-				TargetChildActor->VerifyInteractableData();
-			}
-		}
-	}
+	static void MigrateItemStateFromChildActor(ANAItemActor* SourceChildActor, ANAItemActor* TargetActor);
+	static void MigrateItemStateToChildActor(ANAItemActor* SourceActor, ANAItemActor* TargetChildActor);
+	static void AssignItemDataToChildActor(UNAItemData* ItemData, ANAItemActor* TargetChildActor);
 
 	TScriptInterface<INAInteractableInterface> GetInteractableInterface() const
 	{
@@ -154,8 +93,6 @@ protected:
 	virtual void ReplaceRootWithItemCollisionIfNeeded();
 
 #if WITH_EDITOR
-	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
-	virtual void PostEditChangeChainProperty(struct FPropertyChangedChainEvent& PropertyChangedEvent) override;
 	virtual void PostCDOCompiled(const FPostCDOCompiledContext& Context) override;
 	
 	EItemSubobjDirtyFlags GetDirtySubobjectFlags() const;

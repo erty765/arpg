@@ -20,7 +20,7 @@ enum class ENAInteractableType : uint8
 
 // 아이템 인스턴스 마다 구분되어야 하는 상호작용 데이터
 USTRUCT(BlueprintType)
-struct FNAInteractableData
+struct ARPG_API FNAInteractableData
 {
 	GENERATED_BODY()
 
