@@ -693,3 +693,78 @@ ex) 'ItemCollision(Box)'와 'ItemMesh(Static)'으로 뜨는 오류 (Item Collisi
 └ 모듈 Stratup/Shutdown에서 노드 팩토리 레지스터하는 로직은 그럼 어디에 두냐?!
 	→ ARPG 모듈 정의를 게임 모듈 매크로에 전부 위임하지 말고, ARPG 전용 모듈 클래스를 오버라이드 한 후 이 오버라이드한 클래스를 게임 모듈 매크로에 집어넣기.
 	    오버라이드 클래스에서 StartupModule/ShutdownModule 함수 오버라이드 해서 노드 팩토리 레지스터/언레지스터 로직 끼워넣기
+
+◎ 데이터 테이블 에디터(FDataTableEditor) 오버라이드해서 에디터 런타임 중 메타데이터 편집하는 기능 만들기
+
+◎ 데이터 테이블에서 -로우 추가/로우 이름 변경/로우 삭제- 할 때마다 SaveToTransactionBuffer->Serialize 호출됨
+
+◎ 데이터 테이블에서 Row 추가할 때:
+**FDataTableEditorUtils::AddRow**
+UDataTable::Serialize
+
+◎ 데이터 테이블에서 Row 제거할때:
+**FDataTableEditorUtils::RemoveRow**
+UDataTable::Serialize
+UDataTable::SaveStructData
+UScriptStruct::SerializeItem
+
+◎ 데이터 테이블에서 Row 제거했다가, undo로 다시 복구할때:
+UTransBuffer::Undo
+UDataTable::Serialize
+...
+UObject::PostEditUndo
+UDataTable::HandleDataTableChanged
+
+◎ 데이터 테이블에서 '세이브'할 때:
+FPackageHarvester::ProcessExport
+UDataTable::Serialize
+...
+UPackage::Save
+
+◎ 데이터 테이블에서 Row 이름 바꿀때: (로우 이름 위에 더블클릭)
+UDataTable::Serialize (이전 이름을 트렌젝션 버퍼에 백업하면서 Save->Serialize 두세번 호출)
+FDataTableEditorUtils::RenameRow
+FDataTableEditorUtils::BroadcastPostChange
+FDataTableEditor::PostChange
+FDataTableEditor::HandlePostChange
+
+◎ 로우 이름 위에서 우클릭 -> 이름 변경: FDataTableEditor::RenameSelectedRowCommand
+-> 이름 변경 가능한 상태가 됨
+
+◎ 데이터 테이블에서 Row 변경(Row 이름 편집, Row 추가/제거)이 발생한 후 결과를 아이템 엔진 서브시스템에 반영(메타데이터 키 변경/추가/제거)을 검토하는 타이밍을 "데이터 테이블에서 세이브를 발생시켰을때(세이브 버튼 || ctrl+(shift)+s)"를 기준으로 삼자.
+└ 데이터 테이블에서 row 변경 후 세이브를 실행했을때^이 시점을 후킹^
+
+	1. Row 이름 변경한 경우: FDataTableEditorUtils::RenameRow에서 OldName, NewName 백업
+	→ 이름 변경 여부부터 확인하기
+	2. Row 추가/제거한 경우: 메타데이터 순회하면서 RowMap[Key].RowName과 Value.RowName 비교
+
+└ 이름을 여러번 변경한 경우라면? 변경할 때마다 세이브 안하고 여러번 변경 후 마지막에 세이브한 경우
+ex) Test1 -> Test01 -> Test001: RenameRow가 총 2번 호출될 것임 [OldName, NewName]
+					 첫 번째 호출: [Test1, Test01]
+					 두 번째 호출: [Test01, Test001]
+Test1: 직전 세이브 때의 이름, Test001: 최신 세이브 때의 이름
+메타데이터에는 직전 세이브 때의 이름으로 등록되어있음. (데이터 테이블 세이브 발생 후) 직전 세이브 때의 이름(Test1)을 기준으로 메타데이터 검색 -> 유효한 Value(DataTableRowHandle)를 찾으면 RowName 업데이트
+->세이브 발생했으므로, Name 캐시 데이터 초기화: OldName에 현재 row를 담기
+
+└ Row 이름 변경 추적을 위한 캐시용 컨테이너가 필요할듯. 
+
+◎ Row Struct의 프로퍼티(Column)가 변경될 때에는 FProperty를 활용한 리플렉션 시스템에서 변경되었음을 알림
+◎ Row Struct에 대한 노드를 변경한 경우는 다른 맥락에서 처리되는듯
+
+UK2Node_GetDataTableRow 이런게 있네? (군싹)
+
+enum class EDataTableChangeInfo
+	{
+		/** The data corresponding to a single row has been changed */
+		RowData,
+		/** The data corresponding to the entire list of rows has been changed */
+		RowList,
+	};
+RowList에 해당되는 경우는 OnDataTableChanged가 콜백되지 않음
+
+오버라이드 할만한 함수..
+FDataTableEditor::PostChange (오버로드 포함 2개)
+
+◎ 데이터 테이블(UDataTable) 객체에 Save가 실행되는 지점을 후킹해야 함.
+: 아이템 엔진 서브시스템에서 RowStruct를 포인터를 기준으로 탐색하면,
+세이브 발생 -> RowStruct 포인터를 활용하여 FDataTableRowHandle 찾기 -> 로우 핸들에서 UDataTable 찾고
