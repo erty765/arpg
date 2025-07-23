@@ -57,7 +57,7 @@ struct ARPG_API FNAStaticMeshItemAssetData
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, Category = "Static Mesh Item Asset Data")
+	UPROPERTY(VisibleAnywhere, Category = "Static Mesh Item Asset Data")
 	TObjectPtr<UStaticMesh> StaticMesh = nullptr;
 
 	UPROPERTY(VisibleAnywhere, Category = "Static Mesh Item Asset Data")
@@ -77,14 +77,14 @@ struct FNASkeletalMeshItemAssetData
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, Category = "Skeletal Mesh Item Asset Data")
+	UPROPERTY(VisibleAnywhere, Category = "Skeletal Mesh Item Asset Data")
 	TObjectPtr<USkeletalMesh> SkeletalMesh = nullptr;
 
 	UPROPERTY(VisibleAnywhere, Category = "Skeletal Mesh Item Asset Data")
 	FTransform SkeletalMeshTransform = FTransform::Identity;
 
 	// @TODO: 아이템 전용 애님 클래스 만들기?
-	UPROPERTY(EditAnywhere, Category = "Skeletal Mesh Item Asset Data")
+	UPROPERTY(VisibleAnywhere, Category = "Skeletal Mesh Item Asset Data")
 	TSubclassOf<UAnimInstance/*UNAItemAnimInstance*/> AnimClass;
 };
 
@@ -179,7 +179,7 @@ struct ARPG_API FNAItemBaseTableRow : public FTableRowBase
 
 	/**
 	 * X: Capsule radius
-	 * Y: Capsule half height
+	 * Y: Capsule half-height
 	 */
 	UPROPERTY(VisibleAnywhere, Category = "Item Collision Shape",
 		meta=(EditCondition="CollisionShape == EItemCollisionShape::ICS_Capsule", EditConditionHides, ClampMin= "0.0"))

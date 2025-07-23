@@ -7,7 +7,6 @@
 #include "Components/CapsuleComponent.h"
 #include "Interaction/NAInteractionComponent.h"
 #include "GeometryCollection/GeometryCollectionObject.h"
-#include "Item/ItemSubsystemEditorUtility.h"
 #include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
 #include "Item/ItemWidget/NAItemWidgetComponent.h"
 #include "Net/UnrealNetwork.h"
@@ -15,11 +14,12 @@
 #include "Misc/NALogCategory.h"
 
 #if WITH_EDITOR
+#include "ItemEditor/NAItemEditorUtilities.h"
 #include "Engine/SCS_Node.h"
 #include "Engine/SimpleConstructionScript.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
-#include "NABlueprintGraphNode/NAHideableGraphNode_VariableGet.h"
+#include "NAEditor/BlueprintGraphNode/NAHideableGraphNode_VariableGet.h"
 #include "BlueprintVariableNodeSpawner.h"
 #endif
 
@@ -74,6 +74,10 @@ ANAItemActor::ANAItemActor(const FObjectInitializer& ObjectInitializer)
 			default:
 				bNeedItemCollision = false;
 				break;
+			}
+			if (ItemCollision)
+			{
+				ItemCollision->SetRelativeTransform(FTransform::Identity);
 			}
 			
 			switch (MetaData->MeshType)
@@ -177,7 +181,7 @@ void ANAItemActor::PostLoad()
 	if (!UNAItemEngineSubsystem::Get()) return;
 #if WITH_EDITOR
 	// 메타데이터 인스턴싱 도중 로드된 경우
-	if (FItemSubsystemEditorUtility::IsRegisteredItemMetaClass(GetClass())
+	if (FNAItemEditorUtilities::IsRegisteredItemMetaClass(GetClass())
 		&& !UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized())
 	{
 		BackupItemSubobjectPropertiesToMetaData();
@@ -285,28 +289,28 @@ void ANAItemActor::ReplaceRootWithItemCollisionIfNeeded()
 }
 
 #if WITH_EDITOR
-EItemSubobjDirtyFlags ANAItemActor::GetDirtySubobjectFlags() const
+EItemSubobjDirtyFlags ANAItemActor::GetCurrentDirtyFlags() const
 {
-	const FNAItemBaseTableRow* MetaData =
-		UNAItemEngineSubsystem::Get()
-			? UNAItemEngineSubsystem::Get()->FindItemMetaData(GetClass())
-			: nullptr;
-	return GetDirtySubobjectFlags(MetaData);
+	const FNAItemBaseTableRow* MetaData = UNAItemEngineSubsystem::Get()
+		                                      ? UNAItemEngineSubsystem::Get()->FindItemMetaData(GetClass())
+		                                      : nullptr;
+	return ComputeDirtyFlagsFromMeta(MetaData);
 }
 
-EItemSubobjDirtyFlags ANAItemActor::GetDirtySubobjectFlags(const FNAItemBaseTableRow* MetaData) const
+EItemSubobjDirtyFlags ANAItemActor::ComputeDirtyFlagsFromMeta(const FNAItemBaseTableRow* MetaData) const
 {
-	EItemSubobjDirtyFlags DirtyFlags = EItemSubobjDirtyFlags::ISDF_None;
-	if (!MetaData) { ensureAlways(false); return DirtyFlags; }
+	if (!MetaData) return EItemSubobjDirtyFlags::ISDF_None;
 	
-	if (bNeedItemCollision
-		&& MetaData->CollisionShape != EItemCollisionShape::ICS_None)
+	EItemSubobjDirtyFlags DirtyFlags = EItemSubobjDirtyFlags::ISDF_None;
+	
+	if (bNeedItemCollision && MetaData->CollisionShape != EItemCollisionShape::ICS_None)
 	{
 		bool bDirtyShape = false;
 		bool bDirtyShapeProps = false;
 		bDirtyShape |= ItemCollision == nullptr;
 		bDirtyShapeProps |= ItemCollision == nullptr;
-		if (ItemCollision) {
+		if (ItemCollision)
+		{
 			const FCollisionShape Shape = ItemCollision->GetCollisionShape();
 			switch (MetaData->CollisionShape)
 			{
@@ -341,7 +345,7 @@ EItemSubobjDirtyFlags ANAItemActor::GetDirtySubobjectFlags(const FNAItemBaseTabl
 		}
 	}
 	
-	if (MetaData->MeshType != EItemMeshType::IMT_None && bNeedItemMesh)
+	if (bNeedItemMesh && MetaData->MeshType != EItemMeshType::IMT_None)
 	{
 		bool bDirtyMesh = false;
 		bool bDirtyMeshProps = false;
@@ -393,6 +397,7 @@ EItemSubobjDirtyFlags ANAItemActor::GetDirtySubobjectFlags(const FNAItemBaseTabl
 			EnumAddFlags( DirtyFlags, EItemSubobjDirtyFlags::ISDF_MeshProperties );
 		}
 	}
+	
 	return DirtyFlags;
 }
 
@@ -400,12 +405,13 @@ void ANAItemActor::BackupItemSubobjectPropertiesToMetaData() const
 {
 	if (!HasAnyFlags(RF_ClassDefaultObject)) return;
 
-	if (!FItemSubsystemEditorUtility::IsRegisteredItemMetaClass(GetClass())) return;
+	if (!FNAItemEditorUtilities::IsRegisteredItemMetaClass(GetClass())) return;
     
-    FNAItemBaseTableRow* MetaData = FItemSubsystemEditorUtility::FindItemMetaDataForEditing(GetClass());
-    if (!MetaData) return;
+    FNAItemBaseTableRow* MetaData = FNAItemEditorUtilities::FindItemMetaDataForEditing(GetClass());
+	if (!ensureAlways(MetaData)) return;
+
     
-    const EItemSubobjDirtyFlags CDODirtyFlags = GetDirtySubobjectFlags(MetaData);
+    const EItemSubobjDirtyFlags CDODirtyFlags = ComputeDirtyFlagsFromMeta(MetaData);
 	if (!EnumHasAnyFlags(CDODirtyFlags
 		, EItemSubobjDirtyFlags::ISDF_CollisionProperties | EItemSubobjDirtyFlags::ISDF_MeshProperties)) return;
     
@@ -482,7 +488,7 @@ void ANAItemActor::BackupItemSubobjectPropertiesToMetaData() const
         }
     }
 	
-	FItemSubsystemEditorUtility::MarkMetaDataTableDirty(GetClass());
+	FNAItemEditorUtilities::MarkMetaDataTableDirty(GetClass());
 }
 
 void ANAItemActor::PostCDOCompiled(const FPostCDOCompiledContext& Context)
@@ -501,7 +507,7 @@ void ANAItemActor::PostCDOCompiled(const FPostCDOCompiledContext& Context)
 
 void ANAItemActor::HandleItemClassRegisteredToMetaData()
 {
-	if (FItemSubsystemEditorUtility::IsRegisteredItemMetaClass(GetClass()))
+	if (FNAItemEditorUtilities::IsRegisteredItemMetaClass(GetClass()))
 	{
 		EnsureForceNonDataOnlyVariableUsed();
 		HandleOnItemClassRegisteredToMetaData_Impl();
@@ -509,7 +515,7 @@ void ANAItemActor::HandleItemClassRegisteredToMetaData()
 	// 에디터 런타임 중 메타데이터에 등록된 경우
 	if (UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized())
 	{
-		if (GetDirtySubobjectFlags() != EItemSubobjDirtyFlags::ISDF_None)
+		if (GetCurrentDirtyFlags() != EItemSubobjDirtyFlags::ISDF_None)
 		{
 			if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
 			{
@@ -529,172 +535,16 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 {
 	if (GetWorld() && GetWorld()->HasBegunPlay()) return;
 	
-	if (!FItemSubsystemEditorUtility::IsRegisteredItemMetaClass(GetClass())
+	if (!FNAItemEditorUtilities::IsRegisteredItemMetaClass(GetClass())
 		|| !UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized()) return;
-	
-	const FNAItemBaseTableRow* MetaData = UNAItemEngineSubsystem::Get()->FindItemMetaData(GetClass());
-	if (!MetaData) return;
 
-	const EItemSubobjDirtyFlags DirtyFlags = GetDirtySubobjectFlags(MetaData);
-	if (EnumHasAnyFlags(DirtyFlags,
-		EItemSubobjDirtyFlags::ISDF_CollisionShape | EItemSubobjDirtyFlags::ISDF_MeshType))
+	ReconstructItemSubobjectsFromMetaData_Impl();
+
+	if (bNeedItemCollision && ItemCollision)
 	{
-		UClass* NewItemCollisionClass = nullptr;
-		if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionShape))
-		{
-			switch (MetaData->CollisionShape)
-			{
-			case EItemCollisionShape::ICS_Sphere:
-				NewItemCollisionClass = USphereComponent::StaticClass();
-				break;
-			case EItemCollisionShape::ICS_Box:
-				NewItemCollisionClass = UBoxComponent::StaticClass();
-				break;
-			case EItemCollisionShape::ICS_Capsule:
-				NewItemCollisionClass = UCapsuleComponent::StaticClass();
-				break;
-			default:
-				break;
-			}
-		
-			if (NewItemCollisionClass && ItemCollision
-				&& ItemCollision->GetClass() != NewItemCollisionClass)
-			{
-				ItemCollision->ClearFlags(RF_Standalone | RF_Public);
-				ItemCollision->DestroyComponent();
-				RemoveInstanceComponent(ItemCollision);
-			}
-		}
-
-		UClass* NewItemMeshClass = nullptr;
-		if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_MeshType))
-		{
-			switch (MetaData->MeshType)
-			{
-			case EItemMeshType::IMT_Skeletal:
-				NewItemMeshClass = USkeletalMeshComponent::StaticClass();
-				break;
-			case EItemMeshType::IMT_Static:
-				NewItemMeshClass = UStaticMeshComponent::StaticClass();
-				break;
-			default:
-				break;
-			}
-			if (NewItemMeshClass && ItemMesh
-				&& ItemMesh->GetClass() != NewItemMeshClass)
-			{
-				ItemMesh->ClearFlags(RF_Standalone | RF_Public);
-				ItemMesh->DestroyComponent();
-				RemoveInstanceComponent(ItemMesh);
-			}
-		}
-
-		// 에디터 런타임 중 바뀐 ItemCollision과 ItemMesh: 기본 생성자에 의해 객체는 만들어졌으나,
-		// (현 시점에서) 프로퍼티에 담기지는 않음. 여기서 수동으로 재할당
-		for (UActorComponent* OwnedActorComp : GetComponents().Array())
-		{
-			if (!IsValid(OwnedActorComp)) continue;
-
-			if (bNeedItemCollision && NewItemCollisionClass 
-				&& OwnedActorComp->GetClass()->IsChildOf(NewItemCollisionClass)
-				&& OwnedActorComp->GetName().StartsWith(TEXT("ItemCollision")))
-			{
-				if (UShapeComponent* NewItemCollision = Cast<UShapeComponent>(OwnedActorComp))
-				{
-					ItemCollision = NewItemCollision;
-				}
-			}
-			if (bNeedItemMesh && NewItemMeshClass
-				&& OwnedActorComp->GetClass()->IsChildOf(NewItemMeshClass)
-				&& OwnedActorComp->GetName().StartsWith(TEXT("ItemMesh")))
-			{
-				if (UMeshComponent* NewItemMesh = Cast<UMeshComponent>(OwnedActorComp))
-				{
-					ItemMesh = NewItemMesh;
-				}
-			}
-		}
-		
-		if (UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(GetClass()))
-		{
-			TArray<USCS_Node*> SCSNodes =  BPGC->SimpleConstructionScript->GetAllNodes();
-			if (SCSNodes.Num() > 0)
-			{
-				for (USCS_Node* SCSNode : SCSNodes)
-				{
-					FName ParentComponentName = SCSNode->ParentComponentOrVariableName;
-				
-					if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionShape))
-					{
-						if (ParentComponentName.ToString().StartsWith(TEXT("ItemCollision"))
-							&& !ParentComponentName.IsEqual(ItemCollision->GetFName()))
-						{
-							SCSNode->ParentComponentOrVariableName = ItemCollision->GetFName();
-						}
-					}
-					if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_MeshType))
-					{
-						if (ParentComponentName.ToString().StartsWith(TEXT("ItemMesh"))
-							&& !ParentComponentName.IsEqual(ItemMesh->GetFName()))
-						{
-							SCSNode->ParentComponentOrVariableName = ItemMesh->GetFName();
-						}
-					}
-				}
-			}
-		}
-	}
-
-	if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionProperties))
-	{
-		if (USphereComponent* SphereCollision = Cast<USphereComponent>(ItemCollision))
-		{
-			SphereCollision->SetSphereRadius(MetaData->CollisionSphereRadius);
-		}
-		else if (UBoxComponent* BoxCollision = Cast<UBoxComponent>(ItemCollision))
-		{
-			BoxCollision->SetBoxExtent(MetaData->CollisionBoxExtent);
-		}
-		else if (UCapsuleComponent* CapsuleCollision = Cast<UCapsuleComponent>(ItemCollision))
-		{
-			CapsuleCollision->SetCapsuleSize(
-				MetaData->CollisionCapsuleSize.X, MetaData->CollisionCapsuleSize.Y);
-		}
 		ItemCollision->SetRelativeTransform(FTransform::Identity);
 	}
-	if (EnumHasAnyFlags(DirtyFlags,EItemSubobjDirtyFlags::ISDF_MeshProperties))
-	{
-		if (UStaticMeshComponent* StaticMeshComp = Cast<UStaticMeshComponent>(ItemMesh))
-		{
-			StaticMeshComp->SetStaticMesh(MetaData->StaticMeshAssetData.StaticMesh);
-			ItemFractureCollection = MetaData->StaticMeshAssetData.FractureCollection;
-			ItemFractureCache = MetaData->StaticMeshAssetData.FractureCache;
-			ItemMesh->SetRelativeTransform(MetaData->StaticMeshAssetData.StaticMeshTransform);
-		}
-		if (USkeletalMeshComponent* SkeletalMeshComp = Cast<USkeletalMeshComponent>(ItemMesh))
-		{
-			SkeletalMeshComp->SetSkeletalMesh(MetaData->SkeletalMeshAssetData.SkeletalMesh);
-			SkeletalMeshComp->SetAnimClass(MetaData->SkeletalMeshAssetData.AnimClass);
-			ItemMesh->SetRelativeTransform(MetaData->SkeletalMeshAssetData.SkeletalMeshTransform);
-		}
-	}
 	
-	if (DirtyFlags != EItemSubobjDirtyFlags::ISDF_None)
-	{
-		if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
-		{
-			if (!BP->IsPossiblyDirty())
-			{
-				FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
-				FKismetEditorUtilities::CompileBlueprint(
-					BP,
-					EBlueprintCompileOptions::SkipSave
-					| EBlueprintCompileOptions::SkipGarbageCollection
-					| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
-				);
-			}
-		}
-	}
 	// 부모, 자식에서 Property로 설정된 컴포넌트들을 조회
 	// 최종적으로 프로퍼티에 남은 컴포넌트 주소들을 확인
 	TSet<UActorComponent*> ItemActorSubobjects;
@@ -726,6 +576,169 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 	}
 }
 
+void ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl()
+{
+	const FNAItemBaseTableRow* MetaData = UNAItemEngineSubsystem::Get()->FindItemMetaData(GetClass());
+	check(MetaData);
+
+	const EItemSubobjDirtyFlags DirtyFlags = ComputeDirtyFlagsFromMeta(MetaData);
+	bool bShouldReconstruct = false;
+	
+	UClass* NewItemCollisionClass = nullptr;
+	if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionShape))
+	{
+		bShouldReconstruct = true;
+		
+		switch (MetaData->CollisionShape)
+		{
+		case EItemCollisionShape::ICS_Sphere:
+			NewItemCollisionClass = USphereComponent::StaticClass();
+			break;
+		case EItemCollisionShape::ICS_Box:
+			NewItemCollisionClass = UBoxComponent::StaticClass();
+			break;
+		case EItemCollisionShape::ICS_Capsule:
+			NewItemCollisionClass = UCapsuleComponent::StaticClass();
+			break;
+		default:
+			break;
+		}
+		if (NewItemCollisionClass && ItemCollision
+			&& ItemCollision->GetClass() != NewItemCollisionClass)
+		{
+			ItemCollision->ClearFlags(RF_Standalone | RF_Public);
+			ItemCollision->DestroyComponent();
+			RemoveInstanceComponent(ItemCollision);
+		}
+	}
+
+	UClass* NewItemMeshClass = nullptr;
+	if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_MeshType))
+	{
+		bShouldReconstruct = true;
+		
+		switch (MetaData->MeshType)
+		{
+		case EItemMeshType::IMT_Skeletal:
+			NewItemMeshClass = USkeletalMeshComponent::StaticClass();
+			break;
+		case EItemMeshType::IMT_Static:
+			NewItemMeshClass = UStaticMeshComponent::StaticClass();
+			break;
+		default:
+			break;
+		}
+		if (NewItemMeshClass && ItemMesh
+			&& ItemMesh->GetClass() != NewItemMeshClass)
+		{
+			ItemMesh->ClearFlags(RF_Standalone | RF_Public);
+			ItemMesh->DestroyComponent();
+			RemoveInstanceComponent(ItemMesh);
+		}
+	}
+
+	if (bShouldReconstruct)
+	{
+		// 에디터 런타임 중 바뀐 ItemCollision과 ItemMesh: 기본 생성자에 의해 객체는 만들어졌으나,
+		// (현 시점에서) 프로퍼티에 담기지는 않음. 여기서 수동으로 재할당
+		for (UActorComponent* OwnedActorComp : GetComponents().Array())
+		{
+			if (!IsValid(OwnedActorComp)) continue;
+
+			if (bNeedItemCollision && NewItemCollisionClass
+				&& OwnedActorComp->GetClass()->IsChildOf(NewItemCollisionClass)
+				&& OwnedActorComp->GetName().StartsWith(TEXT("ItemCollision")))
+			{
+				if (UShapeComponent* NewItemCollision = Cast<UShapeComponent>(OwnedActorComp))
+				{
+					ItemCollision = NewItemCollision;
+
+					if (USphereComponent* SphereCollision = Cast<USphereComponent>(ItemCollision))
+					{
+						SphereCollision->SetSphereRadius(MetaData->CollisionSphereRadius);
+					}
+					else if (UBoxComponent* BoxCollision = Cast<UBoxComponent>(ItemCollision))
+					{
+						BoxCollision->SetBoxExtent(MetaData->CollisionBoxExtent);
+					}
+					else if (UCapsuleComponent* CapsuleCollision = Cast<UCapsuleComponent>(ItemCollision))
+					{
+						CapsuleCollision->SetCapsuleSize(
+							MetaData->CollisionCapsuleSize.X, MetaData->CollisionCapsuleSize.Y);
+					}
+					ItemCollision->SetRelativeTransform(FTransform::Identity);
+				}
+			}
+			if (bNeedItemMesh && NewItemMeshClass
+				&& OwnedActorComp->GetClass()->IsChildOf(NewItemMeshClass)
+				&& OwnedActorComp->GetName().StartsWith(TEXT("ItemMesh")))
+			{
+				if (UMeshComponent* NewItemMesh = Cast<UMeshComponent>(OwnedActorComp))
+				{
+					ItemMesh = NewItemMesh;
+
+					if (UStaticMeshComponent* StaticMeshComp = Cast<UStaticMeshComponent>(ItemMesh))
+					{
+						StaticMeshComp->SetStaticMesh(MetaData->StaticMeshAssetData.StaticMesh);
+						ItemFractureCollection = MetaData->StaticMeshAssetData.FractureCollection;
+						ItemFractureCache = MetaData->StaticMeshAssetData.FractureCache;
+						ItemMesh->SetRelativeTransform(MetaData->StaticMeshAssetData.StaticMeshTransform);
+					}
+					if (USkeletalMeshComponent* SkeletalMeshComp = Cast<USkeletalMeshComponent>(ItemMesh))
+					{
+						SkeletalMeshComp->SetSkeletalMesh(MetaData->SkeletalMeshAssetData.SkeletalMesh);
+						SkeletalMeshComp->SetAnimClass(MetaData->SkeletalMeshAssetData.AnimClass);
+						ItemMesh->SetRelativeTransform(MetaData->SkeletalMeshAssetData.SkeletalMeshTransform);
+					}
+				}
+			}
+		}
+
+		if (UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(GetClass()))
+		{
+			TArray<USCS_Node*> SCSNodes = BPGC->SimpleConstructionScript->GetAllNodes();
+			if (SCSNodes.Num() > 0)
+			{
+				for (USCS_Node* SCSNode : SCSNodes)
+				{
+					FName ParentComponentName = SCSNode->ParentComponentOrVariableName;
+
+					if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionShape))
+					{
+						if (ParentComponentName.ToString().StartsWith(TEXT("ItemCollision"))
+							&& !ParentComponentName.IsEqual(ItemCollision->GetFName()))
+						{
+							SCSNode->ParentComponentOrVariableName = ItemCollision->GetFName();
+						}
+					}
+					if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_MeshType))
+					{
+						if (ParentComponentName.ToString().StartsWith(TEXT("ItemMesh"))
+							&& !ParentComponentName.IsEqual(ItemMesh->GetFName()))
+						{
+							SCSNode->ParentComponentOrVariableName = ItemMesh->GetFName();
+						}
+					}
+				}
+			}
+		}
+
+		if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
+		{
+			if (!BP->IsPossiblyDirty())
+			{
+				FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
+				FKismetEditorUtilities::CompileBlueprint(
+					BP,
+					EBlueprintCompileOptions::SkipSave
+					| EBlueprintCompileOptions::SkipGarbageCollection
+					| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
+				);
+			}
+		}
+	}
+}
+
 void ANAItemActor::EnsureForceNonDataOnlyVariableUsed()
 {
 	if (GetWorld() && GetWorld()->IsPlayInEditor())
@@ -749,7 +762,7 @@ void ANAItemActor::EnsureForceNonDataOnlyVariableUsed()
 		return;
 	}
 
-	if (!FItemSubsystemEditorUtility::IsRegisteredItemMetaClass(GetClass()))
+	if (!FNAItemEditorUtilities::IsRegisteredItemMetaClass(GetClass()))
 	{
 		UE_LOG(NAItem, Warning,
 			TEXT("[%hs] 비등록 아이템 클래스에서 호출됨"), __FUNCTION__);
@@ -899,47 +912,14 @@ void ANAItemActor::PreSave(FObjectPreSaveContext SaveContext)
 	Super::PreSave(SaveContext);
 #if WITH_EDITOR
 	if (UNAItemEngineSubsystem::Get()
-		&& FItemSubsystemEditorUtility::IsRegisteredItemMetaClass(GetClass()))
+		&& FNAItemEditorUtilities::IsRegisteredItemMetaClass(GetClass()))
 	{
-		/*if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
-		{
-			bool bShouldAddDummyNode = true;
-			TArray<UEdGraph*> Graphs;
-			BP->GetAllGraphs(Graphs);
-			if (Graphs.Num() > 0)
-			{
-				for (UEdGraph* Graph : Graphs)
-				{
-					if (Graph->GetName().Equals(TEXT("EventGraph")))
-					{
-						TArray<UEdGraphNode*> GNodes = Graph->Nodes;
-						if (GNodes.Num() > 0)
-						{
-							for (UEdGraphNode* GNode : GNodes)
-							{
-								if (UK2Node_Variable* VarNode = Cast<UK2Node_Variable>(GNode))
-								{
-									bShouldAddDummyNode
-										= !VarNode->GetVarNameString().Equals(TEXT("bForceNonDataOnlyBlueprint"));
-									if (!bShouldAddDummyNode) break;
-								}
-							}
-						}
-					}
-				}
-			}
-			if (bShouldAddDummyNode)
-			{
-				bForceNonDataOnlyBlueprint = false;
-			}
-		}*/
-		
 		if (HasAnyFlags(RF_ClassDefaultObject)
 			&& GetClass()->HasAllClassFlags(CLASS_CompiledFromBlueprint)
 			&& !SaveContext.IsProceduralSave())
 		{
 			BackupItemSubobjectPropertiesToMetaData();
-			FItemSubsystemEditorUtility::SaveMetaDataTable(GetClass());
+			FNAItemEditorUtilities::SaveMetaDataTable(GetClass());
 		}
 	}
 #endif

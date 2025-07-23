@@ -5,8 +5,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/EngineSubsystem.h"
 #include "Item/ItemData/NAItemData.h"
-#include "EngineUtils.h"
-#include "Misc/NALogCategory.h"
+
 #include "NAItemEngineSubsystem.generated.h"
 
 UCLASS(BlueprintType)
@@ -27,18 +26,8 @@ UCLASS()
 class ARPG_API UNAItemEngineSubsystem : public UEngineSubsystem
 {
    GENERATED_BODY()
-
-#if WITH_EDITOR
-   friend class UNAItemEditorSubsystem;
-   friend struct FItemSubsystemEditorUtility;
-#endif
-
-   const FTableRowBase* FindItemMetaDataImpl(UClass* ItemClass) const;
    
 public:
-   UNAItemEngineSubsystem();
-    
-protected:
    virtual void Initialize(FSubsystemCollectionBase& Collection) override;
    virtual void Deinitialize() override;
     
@@ -49,11 +38,11 @@ public:
       {
          return GEngine->GetEngineSubsystem<UNAItemEngineSubsystem>();
       }
-       
       return nullptr;
    }
     
-   FORCEINLINE bool IsItemMetaDataInitialized() const {
+   FORCEINLINE bool IsItemMetaDataInitialized() const
+   {
       return bSoftMetaDataInitialized && bMetaDataInitialized;
    }
 
@@ -64,68 +53,7 @@ public:
       return const_cast<ItemDTRow_T*>( static_cast<const ItemDTRow_T*>(FindItemMetaDataImpl(ItemClass)) );
    }
    
-   template<typename ItemActor_T = ANAItemActor>
-      requires TIsDerivedFrom< ItemActor_T, ANAItemActor>::IsDerived
-   const UNAItemData* CreateItemDataByActor(ItemActor_T* ItemActor)
-   {
-      if (!ItemActor)
-      {
-         ensureAlwaysMsgf(false, TEXT("[%hs] 유효하지 않은 ANAItemActor."), __FUNCTION__);
-         return nullptr;
-      }
-       
-      const bool bIsCDOActor = ItemActor->HasAnyFlags(RF_ClassDefaultObject);
-       
-      if (!bIsCDOActor && !IsItemMetaDataInitialized())
-      {
-         ensureAlwaysMsgf(
-            false, TEXT("[%hs] 메타데이터 초기화 안됨."), __FUNCTION__);
-         return nullptr;
-      }
-       
-      UClass* ItemClass = ItemActor->GetClass();
-
-      // 1) 아이템 메타데이터 검색
-      const TMap<TSubclassOf<ANAItemActor>, FDataTableRowHandle>::ValueType* ValuePtr = ItemMetaData.Find(ItemClass);
-      if (!ValuePtr)
-      {
-         ensureAlwaysMsgf(false,
-                TEXT("[%hs] ItemMetaDataMap에 ItemActorClass 미등록."), __FUNCTION__);
-         return nullptr;
-      }
-      FDataTableRowHandle ItemMetaDTRowHandle = *ValuePtr;
-      if (ItemMetaDTRowHandle.IsNull())
-      {
-         ensureAlwaysMsgf(
-            false,
-            TEXT(
-               "[%hs] 메타데이터에 등록되지 않은 ItemClass(%s)."
-            ), __FUNCTION__, *GetNameSafe(ItemClass));
-         return nullptr;
-      }
-
-      // 2) UNAItemData 객체 생성 및 초기화
-      UNAItemData* NewItemData = NewObject<UNAItemData>(this, NAME_None, RF_Transient);
-      if (!NewItemData)
-      {
-         ensureAlwaysMsgf(
-            false, TEXT("[%hs] 새 UNAItemData 객체 생성 실패"), __FUNCTION__);
-         return nullptr;
-      }
-      
-      NewItemData->ItemMetaDataHandle = ItemMetaDTRowHandle;
-      NewItemData->ID = CreateItemID(ItemMetaDTRowHandle.RowName.ToString());
-
-      // 3) 새로 생성한 UNAItemData 객체의 소유권을 런타임 때 아이템 데이터 추적용 Map으로 이관
-      RuntimeItemDataMap.Emplace(NewItemData->ID, NewItemData);
-
-      {
-         UE_LOG(NAItem, Warning, TEXT("[%hs] 아이템 데이터 생성 완료. ID: %s, 관련 액터: %s"),
-            __FUNCTION__, *NewItemData->ID.ToString(), *GetNameSafe(ItemActor));
-      }
-       
-      return RuntimeItemDataMap[NewItemData->ID].Get();
-   }
+   const UNAItemData* CreateItemDataByActor(ANAItemActor* ItemActor);
 
    UNAItemData* GetRuntimeItemData(const FName& InItemID) const;
     
@@ -165,16 +93,19 @@ public:
    }
    
 protected:
-   FORCEINLINE bool IsSoftItemMetaDataInitialized() const {
+   const FTableRowBase* FindItemMetaDataImpl(UClass* ItemClass) const;
+   
+   FORCEINLINE bool IsSoftItemMetaDataInitialized() const
+   {
       return bSoftMetaDataInitialized;
    }
 
    FName CreateItemID(const FString& MetaDataRowName);
    
 private:
-   // 실제 사용할 DataTable 포인터 보관
+   // 실제 사용할 DataTable들을 모아둔 DataAsset
    UPROPERTY()
-   TArray<TObjectPtr<UDataTable>> ItemDataTableSources;
+   TObjectPtr<UItemDataTablesAsset> ItemDataTableSourceCollection = nullptr;
 
    UPROPERTY()
    TMap<TSoftClassPtr<ANAItemActor>, FDataTableRowHandle> SoftItemMetaData;
@@ -186,13 +117,6 @@ private:
    UPROPERTY()
    TMap<TSubclassOf<ANAItemActor>, FDataTableRowHandle> ItemMetaData;
 
-#if WITH_EDITORONLY_DATA
-   // 에디터 런타임 중 메타데이터 편집할 때 사용할 인스턴스
-   // uint8*: ItemMetaData의 Value가 가리키는 RowStruct
-   // FDataTableRowHandle*: ItemMetaData의 Value를 가리키는 포인터
-   // GetRowMap()->FindKey(uint8*)으로 Row Name 가져와서 ItemMetaData[Key].RowName 변경하기
-   TMap<uint8*, FDataTableRowHandle*> ItemMetaDataBuffer;
-#endif
     
    UPROPERTY()
    uint8 bMetaDataInitialized : 1 = false;
@@ -204,4 +128,13 @@ private:
    
    /** 객체가 생성될 때마다 ++ 하여 ID 를 뽑아 주는 원자적 카운터 */
    static FThreadSafeCounter IDCount;
+
+#if WITH_EDITOR
+   TSharedPtr<class FNAItemEditorBridgeService> ItemEditorBridgeService;
+#endif
+   // 에디터 런타임 중 메타데이터 편집할 때 사용할 인스턴스
+   // uint8*: ItemMetaData의 Value가 가리키는 RowStruct
+   // FDataTableRowHandle*: ItemMetaData의 Value를 가리키는 포인터
+   // GetRowMap()->FindKey(uint8*)으로 Row Name 가져와서 ItemMetaData[Key].RowName 변경하기
+   //TMap<uint8*, FDataTableRowHandle*> ItemMetaDataBuffer;
 };

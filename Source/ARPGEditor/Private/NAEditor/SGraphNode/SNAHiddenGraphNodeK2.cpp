@@ -1,4 +1,4 @@
-﻿#include "Item/SGraphNode/SNAHiddenGraphNodeK2.h"
+﻿#include "NAEditor/SGraphNode/SNAHiddenGraphNodeK2.h"
 
 void SNAHiddenGraphNodeK2::Construct(const FArguments& InArgs, UK2Node* InNode)
 {

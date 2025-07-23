@@ -18,7 +18,8 @@ class ARPGEDITOR_API UNAItemEditorSubsystem : public UEditorSubsystem
 
 public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
-
+	virtual void Deinitialize() override;
+	
 private:
 	void HandlePostEngineInit();
 };

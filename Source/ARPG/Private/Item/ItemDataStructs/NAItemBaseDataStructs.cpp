@@ -1,6 +1,5 @@
 #include "Item/ItemDataStructs/NAItemBaseDataStructs.h"
 
-#include "Item/ItemSubsystemEditorUtility.h"
 #include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
 #include "Item/PickableItem/NAWeapon.h"
 #include "Item/PickableItem/NAPowerNode.h"
@@ -8,6 +7,8 @@
 #include "Misc/StringUtils.h"
 
 #if WITH_EDITOR
+#include "ItemEditor/NAItemEditorUtilities.h"
+
 void FNAItemBaseTableRow::OnDataTableChanged(const UDataTable* InDataTable, const FName InRowName)
 {
 	if (!UNAItemEngineSubsystem::Get()

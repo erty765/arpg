@@ -35,16 +35,17 @@ public class ARPG : ModuleRules
 
 		if (Target.bBuildEditor)
 		{
-			PublicDependencyModuleNames.AddRange( new string[]
-			{
-				"UnrealEd",
-				"KismetCompiler",
-				"BlueprintGraph"
-			});
-			
 			PrivateDependencyModuleNames.AddRange(new string[]
 			{
 				"ARPGEditor"
+			});
+			PublicIncludePaths.AddRange(new string[]
+			{
+				"ARPGEditor/Public"
+			});
+			PrivateIncludePaths.AddRange(new string[]
+			{
+				"ARPGEditor/Private"
 			});
 		}
 	}

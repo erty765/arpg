@@ -1,7 +1,7 @@
-#include "NAEdGraphUtilities.h"
+#include "NAEditor/NAEdGraphUtilities.h"
 
-#include "NABlueprintGraphNode/NAHideableGraphNodeInterface.h"
-#include "Item/SGraphNode/SNAHiddenGraphNodeK2.h"
+#include "NAEditor/BlueprintGraphNode/NAHideableGraphNodeInterface.h"
+#include "NAEditor/SGraphNode/SNAHiddenGraphNodeK2.h"
 
 TSharedPtr<SGraphNode> FNAHideableGraphPanelNodeFactory::CreateNode(UEdGraphNode* Node) const
 {

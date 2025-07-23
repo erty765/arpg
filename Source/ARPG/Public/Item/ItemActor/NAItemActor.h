@@ -34,7 +34,7 @@ class ARPG_API ANAItemActor : public AActor, public INAInteractableInterface, pu
 	friend class UNAItemEngineSubsystem;
 #if WITH_EDITOR
 	friend class UNAItemEditorSubsystem;
-	friend struct FItemSubsystemEditorUtility;
+	friend struct FNAItemEditorUtilities;
 #endif
 	
 public:
@@ -95,14 +95,13 @@ protected:
 #if WITH_EDITOR
 	virtual void PostCDOCompiled(const FPostCDOCompiledContext& Context) override;
 	
-	EItemSubobjDirtyFlags GetDirtySubobjectFlags() const;
-	EItemSubobjDirtyFlags GetDirtySubobjectFlags(const FNAItemBaseTableRow* MetaData) const;
-	
+	EItemSubobjDirtyFlags GetCurrentDirtyFlags() const;
+	virtual EItemSubobjDirtyFlags ComputeDirtyFlagsFromMeta(const FNAItemBaseTableRow* MetaData) const;
 	/**
 	 * 현재 아이템 메타데이터를 기반으로 동적 서브오브젝트(콜리전 및 메시 컴포넌트 등)를 재구성.
 	 * 메타데이터 기준에 더 이상 부합하지 않는 불필요한 컴포넌트는 제거.
 	 */
-	virtual void ReconstructItemSubobjectsFromMetaData();
+	virtual void ReconstructItemSubobjectsFromMetaData_Impl();
 	virtual void HandleOnItemClassRegisteredToMetaData_Impl() {}
 #endif
 	
@@ -113,12 +112,13 @@ private:
 	void InitCheckIfChildActor();
 	
 #if WITH_EDITOR
+	void ReconstructItemSubobjectsFromMetaData();
 	void BackupItemSubobjectPropertiesToMetaData() const;
-	// 메타데이터 기반으로 아이템 액터 클래스 동적 초기화할 때 Or 에디터 런타임 중 메타데이터에 새로운 아이템 클래스를 추가했을 때
-	// → 1번만 실행
-	// @see: NAItemEngineSubsystem.cpp - Line 88
-	void EnsureForceNonDataOnlyVariableUsed();
+	
+	// 메타데이터 인스턴스에 해당 클래스가 등록될 때 브로드캐스트
+	FOnItemClassRegisteredToMetaData OnItemClassRegisteredToMetaData;
 	void HandleItemClassRegisteredToMetaData();
+	void EnsureForceNonDataOnlyVariableUsed();
 #endif
 	
 protected:
@@ -161,9 +161,6 @@ private:
 	// 이벤트 그래프에서 이 변수의 Getter 노드를 참조함으로써, 엔진이 해당 클래스를 '로직을 포함한 블루프린트 클래스'로 인식하도록 유도.
 	UPROPERTY(BlueprintReadOnly, Category = "Editor Only", meta = (AllowPrivateAccess = "true"))
 	uint8 bForceNonDataOnlyBlueprint : 1 = false;
-#endif
-#if WITH_EDITOR
-	FOnItemClassRegisteredToMetaData OnItemClassRegisteredToMetaData;
 #endif
 	
 //======================================================================================================================

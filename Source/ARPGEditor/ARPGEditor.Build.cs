@@ -23,10 +23,5 @@ public class ARPGEditor : ModuleRules
 			"BlueprintGraph",
 			"EditorSubsystem"
 		});
-		
-		PrivateDependencyModuleNames.AddRange(new string[]
-		{
-			"ARPG",
-		});
 	}
 }

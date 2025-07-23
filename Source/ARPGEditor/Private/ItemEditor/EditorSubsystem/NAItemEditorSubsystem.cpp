@@ -1,11 +1,9 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "Item/EditorSubsystem/NAItemEditorSubsystem.h"
+#include "ItemEditor/EditorSubsystem/NAItemEditorSubsystem.h"
 
 #include "FileHelpers.h"
-#include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
-#include "Item/ItemActor/NAItemActor.h"
 #include "Kismet2/KismetEditorUtilities.h"
 
 DEFINE_LOG_CATEGORY( LogNAItemEditor )
@@ -45,6 +43,11 @@ void UNAItemEditorSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	// 에디터가 완전히 켜진 뒤에 한 번만 호출
 	FCoreDelegates::OnPostEngineInit.AddUObject(this, &UNAItemEditorSubsystem::HandlePostEngineInit);
+}
+
+void UNAItemEditorSubsystem::Deinitialize()
+{
+	Super::Deinitialize();
 }
 
 void UNAItemEditorSubsystem::HandlePostEngineInit()

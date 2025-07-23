@@ -3,7 +3,7 @@
 class ANAItemActor;
 struct FNAItemBaseTableRow;
 
-struct ARPGEDITOR_API FItemSubsystemEditorUtility
+struct ARPGEDITOR_API FNAItemEditorUtilities
 {
 	static bool IsRegisteredItemMetaClass(UClass* ItemClass);
 	static void RegisterNewItemMetaData(UClass* NewItemClass, const UDataTable* InDataTable, FName InRowName);

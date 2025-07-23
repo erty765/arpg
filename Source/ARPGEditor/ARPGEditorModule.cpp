@@ -1,7 +1,7 @@
 ﻿#include "ARPGEditorModule.h"
 
-#include "NAEdGraphUtilities.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "NAEditor/NAEdGraphUtilities.h"
 
 IMPLEMENT_MODULE(FARPGEditorModule, ARPGEditor);
 

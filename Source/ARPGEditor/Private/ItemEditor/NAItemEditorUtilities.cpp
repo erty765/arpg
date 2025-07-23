@@ -1,8 +1,6 @@
-﻿#include "Item/ItemSubsystemEditorUtility.h"
+﻿#include "ItemEditor/NAItemEditorUtilities.h"
 
-#include "Item/EditorSubsystem/NAItemEditorSubsystem.h"
-#include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
-#include "Item/ItemActor/NAItemActor.h"
+#include "ItemEditor/EditorSubsystem/NAItemEditorSubsystem.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "UObject/SavePackage.h"
@@ -28,7 +26,7 @@ void PredicateBlueprintRecompile(const ANAItemActor* InObject, Predicator P = []
 	}
 }
 
-bool FItemSubsystemEditorUtility::IsRegisteredItemMetaClass(UClass* ItemClass)
+bool FNAItemEditorUtilities::IsRegisteredItemMetaClass(UClass* ItemClass)
 {
 	const UNAItemEngineSubsystem* Subsystem = UNAItemEngineSubsystem::Get();
 	check( Subsystem );
@@ -45,7 +43,7 @@ bool FItemSubsystemEditorUtility::IsRegisteredItemMetaClass(UClass* ItemClass)
 		(Subsystem->ItemMetaData.Contains(Key) || Subsystem->SoftItemMetaData.Contains(Key));
 }
 
-void FItemSubsystemEditorUtility::RegisterNewItemMetaData(UClass* NewItemClass, const UDataTable* InDataTable, const FName InRowName)
+void FNAItemEditorUtilities::RegisterNewItemMetaData(UClass* NewItemClass, const UDataTable* InDataTable, const FName InRowName)
 {
 	UNAItemEngineSubsystem* Subsystem = UNAItemEngineSubsystem::Get();
 	check( Subsystem );
@@ -71,7 +69,7 @@ void FItemSubsystemEditorUtility::RegisterNewItemMetaData(UClass* NewItemClass, 
 	}
 }
 
-void FItemSubsystemEditorUtility::VerifyItemMetaDataRowHandle(UClass* ItemClass, const UDataTable* InDataTable, const FName InRowName)
+void FNAItemEditorUtilities::VerifyItemMetaDataRowHandle(UClass* ItemClass, const UDataTable* InDataTable, const FName InRowName)
 {
 	UNAItemEngineSubsystem* Subsystem = UNAItemEngineSubsystem::Get();
 	check( Subsystem );
@@ -117,7 +115,7 @@ void FItemSubsystemEditorUtility::VerifyItemMetaDataRowHandle(UClass* ItemClass,
 	}
 }
 
-void FItemSubsystemEditorUtility::MarkMetaDataTableDirty(UClass* ItemClass)
+void FNAItemEditorUtilities::MarkMetaDataTableDirty(UClass* ItemClass)
 {
 	const UNAItemEngineSubsystem* Subsystem = UNAItemEngineSubsystem::Get();
 	check( Subsystem );
@@ -147,7 +145,7 @@ void FItemSubsystemEditorUtility::MarkMetaDataTableDirty(UClass* ItemClass)
 	}
 }
  
-void FItemSubsystemEditorUtility::SaveMetaDataTable(UClass* ItemClass)
+void FNAItemEditorUtilities::SaveMetaDataTable(UClass* ItemClass)
 {
 	const UNAItemEngineSubsystem* Subsystem = UNAItemEngineSubsystem::Get();
 	check( Subsystem );
@@ -194,7 +192,7 @@ void FItemSubsystemEditorUtility::SaveMetaDataTable(UClass* ItemClass)
 	}
 }
 
-void FItemSubsystemEditorUtility::PredicateBlueprintRecompile_FlagWise(const ANAItemActor* InObject)
+void FNAItemEditorUtilities::PredicateBlueprintRecompile_FlagWise(const ANAItemActor* InObject)
 {
 	const auto& Predicator = []( const ANAItemActor* Obj ) { return Obj->GetDirtySubobjectFlags() != EItemSubobjDirtyFlags::ISDF_None; };
 	const auto& PreCompile = []( UBlueprint* BP ){  };
@@ -206,7 +204,7 @@ void FItemSubsystemEditorUtility::PredicateBlueprintRecompile_FlagWise(const ANA
 	PredicateBlueprintRecompile( InObject, Predicator, PreCompile, PostCompile );
 }
 
-void FItemSubsystemEditorUtility::PredicateBlueprintRecompile_DirtyWise(const ANAItemActor* InObject)
+void FNAItemEditorUtilities::PredicateBlueprintRecompile_DirtyWise(const ANAItemActor* InObject)
 {
 	const auto& Predicator = []( const ANAItemActor* Obj )
 	{
@@ -223,7 +221,7 @@ void FItemSubsystemEditorUtility::PredicateBlueprintRecompile_DirtyWise(const AN
 	PredicateBlueprintRecompile( InObject, Predicator, PreCompile, PostCompile );
 }
 
-const FTableRowBase* FItemSubsystemEditorUtility::FindItemMetaDataForEditingImpl(UClass* ItemClass)
+const FTableRowBase* FNAItemEditorUtilities::FindItemMetaDataForEditingImpl(UClass* ItemClass)
 {
 	UNAItemEngineSubsystem* Subsystem = UNAItemEngineSubsystem::Get();
 	check( Subsystem );
