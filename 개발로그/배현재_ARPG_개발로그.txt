@@ -768,3 +768,36 @@ FDataTableEditor::PostChange (오버로드 포함 2개)
 ◎ 데이터 테이블(UDataTable) 객체에 Save가 실행되는 지점을 후킹해야 함.
 : 아이템 엔진 서브시스템에서 RowStruct를 포인터를 기준으로 탐색하면,
 세이브 발생 -> RowStruct 포인터를 활용하여 FDataTableRowHandle 찾기 -> 로우 핸들에서 UDataTable 찾고
+
+[07/23]
+◎ ARPGEditor 모듈 유지하면서, ARPG에서만 ARPGEditor 참조하도록 만들어보자
+└ ARPGEditor에 전역 델리게이트들을 선언하고 이걸 매개로 필요한 데이터 전달
+
+◎ 인터페이스 브릿지 패턴으로 ARPGEditor의 ARPG 의존성을 완전히 제거
+1. INAItemEditorBridge (인터페이스)
+└ 위치: ARPGEditor 모듈에 정의.
+└ 책임: ARPGEditor에서 ARPG 쪽 기능을 요청할 때 사용할 진입점 인터페이스.
+
+2. FNAItemEditorBridgeService (인터페이스 구현체)
+└ 위치: ARPG 모듈 WITH_EDITOR 영역
+└ 책임: INAItemEditorBridge를 구현한 실제 기능 수행 클래스.
+└ 저장 위치: UNAItemEngineSubsystem의 멤버로 관리.
+## 헤더 파일과 cpp는 #if WITH_EDITOR로 안전하게 감싸기.
+## 인터페이스는 ARPGEditor에 있지만, 구현은 ARPG에 있으므로 이걸 반드시 명확히 분리.
+
+3. FNAItemEditorBridgeRegistry (전역 등록소, 정적 싱글턴 클래스)
+└ 위치: ARPGEditor 모듈에 정의
+└ 책임: 에디터에서 Bridge에 접근할 수 있도록 전역 포인터 관리.
+└ 메모리 관리: 포인터만 저장할 뿐, 실질 메모리는 ARPG 쪽에서 TSharedPtr 등으로 소유
+
+| 역할            		| 설명                                                   					|
+| -------------------------	| ------------------------------------------------------------------------------	|
+| 중앙 저장소	    	| ARPG 모듈이 만든 구현체(예: `FNAItemEditorBridgeManager`)를 저장	|
+| 전역 조회 포인트 	| ARPGEditor 모듈이 `INAItemEditorBridge`를 안전하게 조회 가능     	|
+| 책임 분리     		| ARPGEditor는 ARPG의 실제 구현을 몰라도 됨 (인터페이스만 사용)	|
+| 런타임 연결    		| 모듈 간 동적 연결 (런타임에 구현체를 바인딩/해제 가능)			|
+
+## FNAItemEditorBridgeRegistry 자체는 정적 클래스이기 때문에 인스턴스 없음. 대신 내부에 정적 포인터(static INAItemEditorBridge*)만 보유.
+## FNAItemEditorBridgeService의 생명주기는 아이템 엔진 서브시스템에서 관리(UNAItemEngineSubsystem::ItemEditorBridgeService)
+└ UNAItemEngineSubsystem::Initialize	   →	FNAItemEditorBridgeRegistry::RegisterBridgeService
+└ UNAItemEngineSubsystem::Deinitialize   →	FNAItemEditorBridgeRegistry::UnregisterBridgeService
