@@ -1,17 +1,17 @@
 #include "NAEditor/NAEdGraphUtilities.h"
 
-#include "NAEditor/BlueprintGraphNode/NAHideableGraphNodeInterface.h"
-#include "NAEditor/SGraphNode/SNAHiddenGraphNodeK2.h"
+#include "NAEditor/BlueprintGraphNode/NAEdHideableGraphNodeInterface.h"
+#include "NAEditor/SGraphNode/SNAEdHiddenGraphNodeK2.h"
 
-TSharedPtr<SGraphNode> FNAHideableGraphPanelNodeFactory::CreateNode(UEdGraphNode* Node) const
+TSharedPtr<SGraphNode> FNAEdHideableGraphPanelNodeFactory::CreateNode(UEdGraphNode* Node) const
 {
-	if (INAHideableGraphNodeInterface* HideableNode = Cast<INAHideableGraphNodeInterface>(Node))
+	if (INAEdHideableGraphNodeInterface* HideableNode = Cast<INAEdHideableGraphNodeInterface>(Node))
 	{
 		if (HideableNode->IsHiddenFromEditor())
 		{
 			if (UK2Node* Derived = Cast<UK2Node>(Node))
 			{
-				return SNew(SNAHiddenGraphNodeK2, Derived);
+				return SNew(SNAEdHiddenGraphNodeK2, Derived);
 			}
 		}
 	}

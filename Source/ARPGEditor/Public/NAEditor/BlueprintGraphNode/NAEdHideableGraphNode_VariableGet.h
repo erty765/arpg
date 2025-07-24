@@ -3,14 +3,14 @@
 #pragma once
 
 #include "K2Node_VariableGet.h"
-#include "NAHideableGraphNodeInterface.h"
-#include "NAHideableGraphNode_VariableGet.generated.h"
+#include "NAEdHideableGraphNodeInterface.h"
+#include "NAEdHideableGraphNode_VariableGet.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class ARPGEDITOR_API UNAHideableGraphNode_VariableGet : public UK2Node_VariableGet, public INAHideableGraphNodeInterface
+class ARPGEDITOR_API UNAEdHideableGraphNode_VariableGet : public UK2Node_VariableGet, public INAEdHideableGraphNodeInterface
 {
 	GENERATED_BODY()
 

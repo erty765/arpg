@@ -14,12 +14,12 @@
 #include "Misc/NALogCategory.h"
 
 #if WITH_EDITOR
-#include "ItemEditor/NAItemEditorUtilities.h"
+#include "Item/NAEditor/FNAEdItemBridgeService.h"
 #include "Engine/SCS_Node.h"
 #include "Engine/SimpleConstructionScript.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
-#include "NAEditor/BlueprintGraphNode/NAHideableGraphNode_VariableGet.h"
+#include "NAEditor/BlueprintGraphNode/NAEdHideableGraphNode_VariableGet.h"
 #include "BlueprintVariableNodeSpawner.h"
 #endif
 
@@ -181,7 +181,7 @@ void ANAItemActor::PostLoad()
 	if (!UNAItemEngineSubsystem::Get()) return;
 #if WITH_EDITOR
 	// 메타데이터 인스턴싱 도중 로드된 경우
-	if (FNAItemEditorUtilities::IsRegisteredItemMetaClass(GetClass())
+	if (FNAEdItemUtilities::IsRegisteredItemMetaClass(GetClass())
 		&& !UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized())
 	{
 		BackupItemSubobjectPropertiesToMetaData();
@@ -405,9 +405,9 @@ void ANAItemActor::BackupItemSubobjectPropertiesToMetaData() const
 {
 	if (!HasAnyFlags(RF_ClassDefaultObject)) return;
 
-	if (!FNAItemEditorUtilities::IsRegisteredItemMetaClass(GetClass())) return;
+	if (!FNAEdItemUtilities::IsRegisteredItemMetaClass(GetClass())) return;
     
-    FNAItemBaseTableRow* MetaData = FNAItemEditorUtilities::FindItemMetaDataForEditing(GetClass());
+    FNAItemBaseTableRow* MetaData = FNAEdItemUtilities::FindItemMetaDataForEditing(GetClass());
 	if (!ensureAlways(MetaData)) return;
 
     
@@ -488,7 +488,7 @@ void ANAItemActor::BackupItemSubobjectPropertiesToMetaData() const
         }
     }
 	
-	FNAItemEditorUtilities::MarkMetaDataTableDirty(GetClass());
+	FNAEdItemUtilities::MarkMetaDataTableDirty(GetClass());
 }
 
 void ANAItemActor::PostCDOCompiled(const FPostCDOCompiledContext& Context)
@@ -507,7 +507,7 @@ void ANAItemActor::PostCDOCompiled(const FPostCDOCompiledContext& Context)
 
 void ANAItemActor::HandleItemClassRegisteredToMetaData()
 {
-	if (FNAItemEditorUtilities::IsRegisteredItemMetaClass(GetClass()))
+	if (FNAEdItemUtilities::IsRegisteredItemMetaClass(GetClass()))
 	{
 		EnsureForceNonDataOnlyVariableUsed();
 		HandleOnItemClassRegisteredToMetaData_Impl();
@@ -535,7 +535,7 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 {
 	if (GetWorld() && GetWorld()->HasBegunPlay()) return;
 	
-	if (!FNAItemEditorUtilities::IsRegisteredItemMetaClass(GetClass())
+	if (!FNAEdItemUtilities::IsRegisteredItemMetaClass(GetClass())
 		|| !UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized()) return;
 
 	ReconstructItemSubobjectsFromMetaData_Impl();
@@ -762,7 +762,7 @@ void ANAItemActor::EnsureForceNonDataOnlyVariableUsed()
 		return;
 	}
 
-	if (!FNAItemEditorUtilities::IsRegisteredItemMetaClass(GetClass()))
+	if (!FNAEdItemUtilities::IsRegisteredItemMetaClass(GetClass()))
 	{
 		UE_LOG(NAItem, Warning,
 			TEXT("[%hs] 비등록 아이템 클래스에서 호출됨"), __FUNCTION__);
@@ -821,15 +821,15 @@ void ANAItemActor::EnsureForceNonDataOnlyVariableUsed()
 						{
 							UBlueprintVariableNodeSpawner* GetterSpawner
 								= UBlueprintVariableNodeSpawner::CreateFromMemberOrParam(
-									UNAHideableGraphNode_VariableGet::StaticClass()
+									UNAEdHideableGraphNode_VariableGet::StaticClass()
 									, Property);
 							check(GetterSpawner != nullptr);
 							UEdGraphNode* NewGetterNode = GetterSpawner->Invoke(
 								Graph
 								, IBlueprintNodeBinder::FBindingSet()
 								, FVector2D(0.f, -10.f));
-							if (INAHideableGraphNodeInterface* HideableGetterNode
-								= Cast<INAHideableGraphNodeInterface>(NewGetterNode))
+							if (INAEdHideableGraphNodeInterface* HideableGetterNode
+								= Cast<INAEdHideableGraphNodeInterface>(NewGetterNode))
 							{
 								HideableGetterNode->SetHiddenFromEditor(true);
 							}
@@ -912,14 +912,14 @@ void ANAItemActor::PreSave(FObjectPreSaveContext SaveContext)
 	Super::PreSave(SaveContext);
 #if WITH_EDITOR
 	if (UNAItemEngineSubsystem::Get()
-		&& FNAItemEditorUtilities::IsRegisteredItemMetaClass(GetClass()))
+		&& FNAEdItemUtilities::IsRegisteredItemMetaClass(GetClass()))
 	{
 		if (HasAnyFlags(RF_ClassDefaultObject)
 			&& GetClass()->HasAllClassFlags(CLASS_CompiledFromBlueprint)
 			&& !SaveContext.IsProceduralSave())
 		{
 			BackupItemSubobjectPropertiesToMetaData();
-			FNAItemEditorUtilities::SaveMetaDataTable(GetClass());
+			FNAEdItemUtilities::SaveMetaDataTable(GetClass());
 		}
 	}
 #endif

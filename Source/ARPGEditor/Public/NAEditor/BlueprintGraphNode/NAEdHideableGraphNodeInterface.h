@@ -2,15 +2,15 @@
 
 #include "CoreMinimal.h"
 #include "UObject/Interface.h"
-#include "NAHideableGraphNodeInterface.generated.h"
+#include "NAEdHideableGraphNodeInterface.generated.h"
 
 UINTERFACE(MinimalAPI, NotBlueprintable)
-class UNAHideableGraphNodeInterface : public UInterface
+class UNAEdHideableGraphNodeInterface : public UInterface
 {
 	GENERATED_BODY()
 };
 
-class ARPGEDITOR_API INAHideableGraphNodeInterface
+class ARPGEDITOR_API INAEdHideableGraphNodeInterface
 {
 	GENERATED_BODY()
 

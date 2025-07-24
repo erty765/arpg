@@ -7,7 +7,7 @@
 #include "Misc/StringUtils.h"
 
 #if WITH_EDITOR
-#include "ItemEditor/NAItemEditorUtilities.h"
+#include "Item/NAEditor/FNAEdItemBridgeService.h"
 
 void FNAItemBaseTableRow::OnDataTableChanged(const UDataTable* InDataTable, const FName InRowName)
 {

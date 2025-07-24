@@ -2,11 +2,11 @@
 
 #include "EdGraphUtilities.h"
 
-class SNAHiddenGraphNodeK2;
+class SNAEdHiddenGraphNodeK2;
 
-struct FNAHideableGraphPanelNodeFactory : public FGraphPanelNodeFactory
+struct FNAEdHideableGraphPanelNodeFactory : public FGraphPanelNodeFactory
 {
 public:
-	virtual ~FNAHideableGraphPanelNodeFactory() override {}
+	virtual ~FNAEdHideableGraphPanelNodeFactory() override {}
 	virtual TSharedPtr<SGraphNode> CreateNode(UEdGraphNode* Node) const override;
 };

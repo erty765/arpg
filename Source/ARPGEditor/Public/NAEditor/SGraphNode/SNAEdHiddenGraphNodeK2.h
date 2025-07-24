@@ -1,10 +1,10 @@
 ﻿#pragma once
 #include "KismetNodes/SGraphNodeK2Base.h"
 
-class ARPGEDITOR_API SNAHiddenGraphNodeK2 : public SGraphNodeK2Base
+class ARPGEDITOR_API SNAEdHiddenGraphNodeK2 : public SGraphNodeK2Base
 {
 public:
-	SLATE_BEGIN_ARGS(SNAHiddenGraphNodeK2)
+	SLATE_BEGIN_ARGS(SNAEdHiddenGraphNodeK2)
 	{
 		_Visibility = EVisibility::Collapsed;
 	}

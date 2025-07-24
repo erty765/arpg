@@ -26,11 +26,11 @@ UCLASS()
 class ARPG_API UNAItemEngineSubsystem : public UEngineSubsystem
 {
    GENERATED_BODY()
-   
+
 public:
    virtual void Initialize(FSubsystemCollectionBase& Collection) override;
    virtual void Deinitialize() override;
-    
+
 public:
    static UNAItemEngineSubsystem* Get()
    {
@@ -43,7 +43,7 @@ public:
     
    FORCEINLINE bool IsItemMetaDataInitialized() const
    {
-      return bSoftMetaDataInitialized && bMetaDataInitialized;
+      return bSoftItemMetaDataInitialized && bItemMetaDataInitialized;
    }
 
    template<typename ItemDTRow_T = FNAItemBaseTableRow>
@@ -97,7 +97,7 @@ protected:
    
    FORCEINLINE bool IsSoftItemMetaDataInitialized() const
    {
-      return bSoftMetaDataInitialized;
+      return bSoftItemMetaDataInitialized;
    }
 
    FName CreateItemID(const FString& MetaDataRowName);
@@ -107,19 +107,17 @@ private:
    UPROPERTY()
    TObjectPtr<UItemDataTablesAsset> ItemDataTableSourceCollection = nullptr;
 
+   // 소프트 아이템 메타데이터
    UPROPERTY()
-   TMap<TSoftClassPtr<ANAItemActor>, FDataTableRowHandle> SoftItemMetaData;
-
+   TMap<TSoftClassPtr<AActor>, FDataTableRowHandle> SoftItemMetaData;
    UPROPERTY()
-   uint8 bSoftMetaDataInitialized : 1 = false;
+   uint8 bSoftItemMetaDataInitialized : 1 = false;
     
-   // 메타데이터 매핑
+   // 아이템 메타데이터
    UPROPERTY()
-   TMap<TSubclassOf<ANAItemActor>, FDataTableRowHandle> ItemMetaData;
-
-    
+   TMap<TSubclassOf<AActor>, FDataTableRowHandle> ItemMetaData;
    UPROPERTY()
-   uint8 bMetaDataInitialized : 1 = false;
+   uint8 bItemMetaDataInitialized : 1 = false;
 
    // 런타임 데이터 매핑
    // 아이템 ID: 런타임 때 아이템 데이터 식별용
@@ -127,11 +125,13 @@ private:
    TMap<FName, TObjectPtr<UNAItemData>> RuntimeItemDataMap;
    
    /** 객체가 생성될 때마다 ++ 하여 ID 를 뽑아 주는 원자적 카운터 */
-   static FThreadSafeCounter IDCount;
+   FThreadSafeCounter IDCount = 0;
 
 #if WITH_EDITOR
-   TSharedPtr<class FNAItemEditorBridgeService> ItemEditorBridgeService;
+   friend class FNAEdItemBridgeService;
+   TSharedPtr<FNAEdItemBridgeService> ItemEditorBridge;
 #endif
+   
    // 에디터 런타임 중 메타데이터 편집할 때 사용할 인스턴스
    // uint8*: ItemMetaData의 Value가 가리키는 RowStruct
    // FDataTableRowHandle*: ItemMetaData의 Value를 가리키는 포인터

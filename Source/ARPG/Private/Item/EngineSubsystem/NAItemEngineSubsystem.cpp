@@ -12,103 +12,114 @@
 #include "Item/ItemDataStructs/NAWeaponDataStructs.h"
 
 #if WITH_EDITOR
-#include "Item/Editor/FNAItemEditorBridgeService.h"
-#include "ItemEditor/ItemEditorBridge/NAItemEditorBridgeRegistry.h"
+#include "Item/NAEditor/FNAEdItemBridgeService.h"
 #endif
-
-// 프로그램 시작 시 0 에서 시작
-FThreadSafeCounter UNAItemEngineSubsystem::IDCount(0);
 
 void UNAItemEngineSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
+	UE_LOG(LogInit, Log, TEXT("%hs"), __FUNCTION__);
+	
 	Super::Initialize(Collection);
-	UE_LOG( LogInit, Log, TEXT("%hs"), __FUNCTION__ )
-
-	if (ItemDataTableSourceCollection == nullptr)
-	{
-		// 1) Registry 에셋 동기 로드
-		static const FString RegistryPath = TEXT("/Script/ARPG.ItemDataTablesAsset'/Game/00_ProjectNA/01_Blueprint/00_Actor/MainGame/Items/DA_ItemDataTables.DA_ItemDataTables'");
-		ItemDataTableSourceCollection = Cast<UItemDataTablesAsset>(StaticLoadObject(UItemDataTablesAsset::StaticClass(), nullptr, *RegistryPath));
-	
-		if (!IsValid(ItemDataTableSourceCollection))
-		{
-			UE_LOG(NAItem, Error, TEXT("[%hs] ItemDataTablesAsset 로드 실패. 경로: %s"), __FUNCTION__, *RegistryPath);
-			return;
-		}
-	
-		// 2) Registry 안의 SoftObjectPtr<UDataTable> 리스트 순회
-		if (ItemDataTableSourceCollection->ItemDataTables.Num() == 0)
-		{
-			UE_LOG(NAItem, Error, TEXT("[%hs] ItemDataTablesAsset에 DataTable 에셋이 없음"), __FUNCTION__);
-			return;
-		}
-		TArray<UDataTable*> ItemDataTableSources;
-		ItemDataTableSources.Reserve(ItemDataTableSourceCollection->ItemDataTables.Num());
-		UE_LOG(NAItem, Display, TEXT("[%hs] 아이템 DT 로드 시작"), __FUNCTION__);
-		for (const TSoftObjectPtr<UDataTable>& SoftDT : ItemDataTableSourceCollection->ItemDataTables)
-		{
-			UDataTable* ResourceDT = SoftDT.LoadSynchronous();
-			if (!ResourceDT)
-			{
-				UE_LOG(NAItem, Warning,
-				TEXT("[%hs] 아이템 DT 로드 실패. 경로: %s"), __FUNCTION__, *SoftDT.ToString());
-				continue;
-			}
-	
-			ItemDataTableSources.Emplace(ResourceDT);
-			UE_LOG(NAItem, Display,
-			 TEXT("[%hs] 아이템 DT 로드 성공. 이름: %s"), __FUNCTION__, *ResourceDT->GetName());
-		}
-
-		if (ItemDataTableSources.IsEmpty()) return;
-		
-		// 3) TSoftClassPtr<T>, FDataTableRowHandle 맵 생성 -> 블루프린트 에셋 로드 전에 소프트 메타데이터 미리 인스턴싱
-		UE_LOG(NAItem, Display,
-		       TEXT("[%hs] SoftClass 메타데이터 매핑 진행"), __FUNCTION__);
-		for (UDataTable* DT : ItemDataTableSources)
-		{
-			for (const TPair<FName, uint8*>& Pair : DT->GetRowMap())
-			{
-				FName  RowName = Pair.Key;
-				FNAItemBaseTableRow* Row = DT->FindRow<FNAItemBaseTableRow>(RowName, TEXT("Mapping [soft] item meta data"));
-				if (!Row || Row->ItemClass.IsNull()) continue; 
-				FDataTableRowHandle Handle;
-				Handle.DataTable = DT;
-				Handle.RowName = RowName;
-				SoftItemMetaData.Emplace(Row->ItemClass, Handle);
-			}
-		}
-	
-		// 4) 메타데이터 맵 빌드
-		UE_LOG(NAItem, Display,
-			 TEXT("[%hs] 아이템 메타데이터 매핑 진행"), __FUNCTION__);
-		if ( !SoftItemMetaData.IsEmpty() && ItemMetaData.IsEmpty())
-		{
-			bSoftMetaDataInitialized = true;
-			ItemMetaData.Reserve(SoftItemMetaData.Num());
-			
-			for (const auto& Pair : SoftItemMetaData)
-			{
-				UClass* NewItemActorClass = Pair.Key.LoadSynchronous();
-				if (NewItemActorClass && !Pair.Value.IsNull())
-				{
-					ItemMetaData.Emplace(NewItemActorClass, Pair.Value);
-				}
-			}
-		}
-	}
-
-	if (bSoftMetaDataInitialized
-		&& SoftItemMetaData.Num() == ItemMetaData.Num())
-	{
-		bMetaDataInitialized = true;
-		UE_LOG(NAItem, Display, TEXT("[%hs] 아이템 메타데이터 인스턴싱 완료"), __FUNCTION__);
-	}
 	
 #if WITH_EDITOR
-	ItemEditorBridgeService = MakeShared<FNAItemEditorBridgeService>();
-	FNAItemEditorBridgeRegistry::RegisterBridgeService(ItemEditorBridgeService.Get());
+	ItemEditorBridge = MakeShared<FNAEdItemBridgeService>();
+	FNAEdItemBridgeRegistry::Register(ItemEditorBridge.Get());
 #endif
+	
+	check(ItemDataTableSourceCollection == nullptr);
+	
+	// 0) Registry 에셋 동기 로드
+	static const FString RegistryPath = TEXT(
+		"/Script/ARPG.ItemDataTablesAsset'/Game/00_ProjectNA/01_Blueprint/00_Actor/MainGame/Items/DA_ItemDataTables.DA_ItemDataTables'");
+	ItemDataTableSourceCollection = Cast<UItemDataTablesAsset>(
+		StaticLoadObject(UItemDataTablesAsset::StaticClass(), nullptr, *RegistryPath));
+
+	if (!IsValid(ItemDataTableSourceCollection))
+	{
+		UE_LOG(NAItem, Error, TEXT("[%hs] ItemDataTablesAsset 로드 실패. 경로: %s"), __FUNCTION__, *RegistryPath);
+		return;
+	}
+	if (ItemDataTableSourceCollection->ItemDataTables.Num() == 0)
+	{
+		UE_LOG(NAItem, Error, TEXT("[%hs] ItemDataTablesAsset에 DataTable 에셋이 없음"), __FUNCTION__);
+		return;
+	}
+
+	// 1) Registry 안의 SoftObjectPtr<UDataTable> 리스트 순회
+	UE_LOG(NAItem, Display, TEXT("[%hs] 아이템 DT 로드 시작"), __FUNCTION__);
+
+	TArray<UDataTable*> ItemDataTableSources;
+	ItemDataTableSources.Reserve(ItemDataTableSourceCollection->ItemDataTables.Num());
+	for (const TSoftObjectPtr<UDataTable>& SoftDT : ItemDataTableSourceCollection->ItemDataTables)
+	{
+		if (SoftDT.IsNull())
+		{
+			UE_LOG(NAItem, Warning,
+				   TEXT("[%hs] SoftPtr가 Null 상태임: %s"), __FUNCTION__, *SoftDT.ToString());
+			continue;
+		}
+
+		UDataTable* ResourceDT = SoftDT.LoadSynchronous();
+		ItemDataTableSources.Emplace(ResourceDT);
+		UE_LOG(NAItem, Display,
+			   TEXT("[%hs] 아이템 DT 로드 성공. 이름: %s"), __FUNCTION__, *ResourceDT->GetName());
+	}
+	if (ItemDataTableSources.IsEmpty())
+	{
+		UE_LOG(NAItem, Warning,
+		       TEXT("[%hs] 모든 DataTable 로드 실패. 에셋 경로 또는 포맷 문제를 확인할 것."), __FUNCTION__);
+		return;
+	}
+
+	// 2) TSoftClassPtr<T>, FDataTableRowHandle 맵 생성 → 블루프린트 에셋 로드 전에 소프트 아이템 메타데이터 미리 매핑
+	UE_LOG(NAItem, Display, TEXT("[%hs] SoftClass 아이템 메타데이터 매핑 진행"), __FUNCTION__);
+	
+	for (UDataTable* DT : ItemDataTableSources)
+	{
+		for (const TPair<FName, uint8*>& Pair : DT->GetRowMap())
+		{
+			FName RowName = Pair.Key;
+			FNAItemBaseTableRow* RowStruct = DT->FindRow<FNAItemBaseTableRow>(RowName, TEXT("Mapping [soft] item meta data"));
+			if (!RowStruct || RowStruct->ItemClass.IsNull()) continue;
+			FDataTableRowHandle Handle;
+			Handle.DataTable = DT;
+			Handle.RowName = RowName;
+			SoftItemMetaData.Emplace(RowStruct->ItemClass, Handle);
+		}
+	}
+	if (SoftItemMetaData.IsEmpty())
+	{
+		UE_LOG(NAItem, Warning,
+			   TEXT("[%hs] SoftItemMetaData 매핑 실패. 모든 Row가 유효하지 않거나 ItemClass가 비어 있음. DataTable 내 항목의 구조 또는 설정을 확인할 것."), __FUNCTION__);
+		return;
+	}
+	bSoftItemMetaDataInitialized = true;
+
+#if WITH_EDITOR
+	UE_LOG(NAItem, Warning,
+				TEXT("[%hs] 에디터 빌드에서는 NAEdItemEngineSubsystem에서 아이템 메타데이터 인스턴싱 진행"), __FUNCTION__);
+	return;
+#endif
+
+	// 3) 메타데이터 인스턴스 빌드
+	UE_LOG(NAItem, Display, TEXT("[%hs] 아이템 메타데이터 인스턴싱 진행"), __FUNCTION__);
+
+	ItemMetaData.Reserve(SoftItemMetaData.Num());
+	for (const auto& Pair : SoftItemMetaData)
+	{
+		UClass* NewItemActorClass = Pair.Key.LoadSynchronous();
+		check(NewItemActorClass->IsChildOf<ANAItemActor>());
+		if (NewItemActorClass && !Pair.Value.IsNull())
+		{
+			ItemMetaData.Emplace(NewItemActorClass, Pair.Value);
+		}
+	}
+	
+	if (bSoftItemMetaDataInitialized && SoftItemMetaData.Num() == ItemMetaData.Num())
+	{
+		bItemMetaDataInitialized = true;
+		UE_LOG(NAItem, Display, TEXT("[%hs] 아이템 메타데이터 인스턴싱 완료"), __FUNCTION__);
+	}
 }
 
 void UNAItemEngineSubsystem::Deinitialize()
@@ -116,8 +127,8 @@ void UNAItemEngineSubsystem::Deinitialize()
 	Super::Deinitialize();
 	
 #if WITH_EDITOR
-	FNAItemEditorBridgeRegistry::UnregisterBridgeService();
-	ItemEditorBridgeService.Reset();
+	FNAEdItemBridgeRegistry::Unregister();
+	ItemEditorBridge.Reset();
 #endif
 }
 

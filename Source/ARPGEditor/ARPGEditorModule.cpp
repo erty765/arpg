@@ -1,13 +1,13 @@
 ﻿#include "ARPGEditorModule.h"
 
 #include "Kismet2/KismetEditorUtilities.h"
-#include "NAEditor/NAEdGraphUtilities.h"
+#include "Public/NAEditor/NAEdGraphUtilities.h"
 
 IMPLEMENT_MODULE(FARPGEditorModule, ARPGEditor);
 
 void FARPGEditorModule::StartupModule()
 {
-	NAHideableGraphNodeFactory = MakeShareable(new FNAHideableGraphPanelNodeFactory());
+	NAHideableGraphNodeFactory = MakeShareable(new FNAEdHideableGraphPanelNodeFactory());
 	FEdGraphUtilities::RegisterVisualNodeFactory(NAHideableGraphNodeFactory);
 }
 

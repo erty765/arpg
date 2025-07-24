@@ -10,10 +10,6 @@ class UNAMontageCombatComponent;
 class UBillboardComponent;
 class UMaterialInstanceConstant;
 
-#if WITH_EDITOR
-DECLARE_DELEGATE(FOnItemClassRegisteredToMetaData);
-#endif
-
 UENUM()
 enum class EItemSubobjDirtyFlags : uint8
 {
@@ -33,8 +29,7 @@ class ARPG_API ANAItemActor : public AActor, public INAInteractableInterface, pu
 	
 	friend class UNAItemEngineSubsystem;
 #if WITH_EDITOR
-	friend class UNAItemEditorSubsystem;
-	friend struct FNAItemEditorUtilities;
+	friend class FNAEdItemBridgeService;
 #endif
 	
 public:
@@ -115,8 +110,6 @@ private:
 	void ReconstructItemSubobjectsFromMetaData();
 	void BackupItemSubobjectPropertiesToMetaData() const;
 	
-	// 메타데이터 인스턴스에 해당 클래스가 등록될 때 브로드캐스트
-	FOnItemClassRegisteredToMetaData OnItemClassRegisteredToMetaData;
 	void HandleItemClassRegisteredToMetaData();
 	void EnsureForceNonDataOnlyVariableUsed();
 #endif
