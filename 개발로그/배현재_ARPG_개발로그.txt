@@ -801,3 +801,16 @@ FDataTableEditor::PostChange (오버로드 포함 2개)
 ## FNAItemEditorBridgeService의 생명주기는 아이템 엔진 서브시스템에서 관리(UNAItemEngineSubsystem::ItemEditorBridgeService)
 └ UNAItemEngineSubsystem::Initialize	   →	FNAItemEditorBridgeRegistry::RegisterBridgeService
 └ UNAItemEngineSubsystem::Deinitialize   →	FNAItemEditorBridgeRegistry::UnregisterBridgeService
+
+[07/24]
+◎ Registry만 템플릿화해서, 매번 새로운 Registry 클래스를 별도로 정의할 필요가 없도록
+└ Registry 구조는? → 모든 시스템에서 동일한 역할, 동일한 로직, 단지 타입만 다름
+└ 이 부분은 템플릿으로 추출해서 재사용하면 중복 제거 + 유지보수 편의성 향상
+
+ARPGEditor/
+├── Public/
+│   ├── BridgeTemplates/
+│   │   └── TEditorBridgeRegistry.h      👈 템플릿 클래스
+│   ├── NAItem/
+│   │   ├── INAItemEditorBridge.h
+│   │   └── FNAItemEditorBridgeRegistry.h ➡ 제거 or using으로 변경
