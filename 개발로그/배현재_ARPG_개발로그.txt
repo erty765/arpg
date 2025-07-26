@@ -814,3 +814,15 @@ ARPGEditor/
 │   ├── NAItem/
 │   │   ├── INAItemEditorBridge.h
 │   │   └── FNAItemEditorBridgeRegistry.h ➡ 제거 or using으로 변경
+
+[07/26]
+
+	//@TODO: 아이템 엔진Subsys과 에디터Subsys 사이의 통신에 필요한 메서드 고민하기
+
+
+using FNAEdItemBridgeRegistry = TNAEdBridgeRegistry<INAEdItemBridge>;
+
+python Scripts/GenerateBridgeWrapper.py INAEdItemBridge FNAEdItemBridge Source/ARPGEditor/Public/NAEditor_Item/ItemEditorBridge/NAEdItemEditorBridgeInterface.h
+
+[07/26]
+브릿지 래퍼 파싱 스크립트 추가
