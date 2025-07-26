@@ -21,13 +21,13 @@ void FNAItemBaseTableRow::OnDataTableChanged(const UDataTable* InDataTable, cons
 	
 	if (UClass* ItemActorClass = ItemMetaDataStruct->ItemClass.Get())
 	{
-		if (!FItemSubsystemEditorUtility::IsRegisteredItemMetaClass(ItemActorClass))
+		if (!FNAEdItemBridge::IsRegisteredItemMetaClass(ItemActorClass))
 		{
-			FItemSubsystemEditorUtility::RegisterNewItemMetaData(ItemActorClass, InDataTable, InRowName);
+			FNAEdItemBridge::RegisterNewItemMetaData(ItemActorClass, InDataTable, InRowName);
 		}
 		else
 		{
-			FItemSubsystemEditorUtility::VerifyItemMetaDataRowHandle(ItemActorClass, InDataTable, InRowName);
+			FNAEdItemBridge::VerifyItemMetaDataRowHandle(ItemActorClass, InDataTable, InRowName);
 		}
 	}
 

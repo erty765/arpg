@@ -3,16 +3,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "StringUtils.generated.h"
 
-/**
- * 
- */
-USTRUCT()
 struct FStringUtils
 {
-	GENERATED_BODY()
-
 	template<typename EnumType>
 	static FString EnumToDisplayString(const EnumType EnumeratorValue)
 	{

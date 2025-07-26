@@ -28,30 +28,28 @@ class UBlueprintVariableNodeSpawner;
 ANAItemActor::ANAItemActor(const FObjectInitializer& ObjectInitializer)
 	:Super(ObjectInitializer)
 {
+	/*if (HasAnyFlags(RF_ClassDefaultObject))
 	{
-		// if (HasAnyFlags(RF_ClassDefaultObject))
-		// {
-		// 	if (!GetClass()->HasAllClassFlags(CLASS_CompiledFromBlueprint))
-		// 	{
-		// 		UE_LOG(NAItem, Log, TEXT("[ANAItemActor] C++ CDO (%s)"), *GetNameSafe(this));
-		// 	}
-		// 	else
-		// 	{
-		// 		UE_LOG(NAItem, Log, TEXT("[ANAItemActor] BP CDO (%s)"), *GetNameSafe(this));
-		// 	}
-		// }
-		// else
-		// {
-		// 	if (!GetClass()->HasAllClassFlags(CLASS_CompiledFromBlueprint))
-		// 	{
-		// 		UE_LOG(NAItem, Log, TEXT("[ANAItemActor] C++ 인스턴스 (%s)"), *GetNameSafe(this));
-		// 	}
-		// 	else
-		// 	{
-		// 		UE_LOG(NAItem, Log, TEXT("[ANAItemActor] BP 인스턴스 (%s)"), *GetNameSafe(this));
-		// 	}
-		// }
+		if (!GetClass()->HasAllClassFlags(CLASS_CompiledFromBlueprint))
+		{
+			UE_LOG(NAItem, Log, TEXT("[ANAItemActor] C++ CDO (%s)"), *GetNameSafe(this));
+		}
+		else
+		{
+			UE_LOG(NAItem, Log, TEXT("[ANAItemActor] BP CDO (%s)"), *GetNameSafe(this));
+		}
 	}
+	else
+	{
+		if (!GetClass()->HasAllClassFlags(CLASS_CompiledFromBlueprint))
+		{
+			UE_LOG(NAItem, Log, TEXT("[ANAItemActor] C++ 인스턴스 (%s)"), *GetNameSafe(this));
+		}
+		else
+		{
+			UE_LOG(NAItem, Log, TEXT("[ANAItemActor] BP 인스턴스 (%s)"), *GetNameSafe(this));
+		}
+	}*/
 
 	StubRootComponent = CreateDefaultSubobject<USceneComponent>("StubRootComponent");
 	SetRootComponent( StubRootComponent );
@@ -181,8 +179,8 @@ void ANAItemActor::PostLoad()
 	if (!UNAItemEngineSubsystem::Get()) return;
 #if WITH_EDITOR
 	// 메타데이터 인스턴싱 도중 로드된 경우
-	if (FNAEdItemUtilities::IsRegisteredItemMetaClass(GetClass())
-		&& !UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized())
+	if (FNAEdItemBridge::GetItemRegistrationPhase(GetClass())
+		== EItemEditorRegistrationPhase::DuringInstancing)
 	{
 		BackupItemSubobjectPropertiesToMetaData();
 	}
@@ -405,9 +403,9 @@ void ANAItemActor::BackupItemSubobjectPropertiesToMetaData() const
 {
 	if (!HasAnyFlags(RF_ClassDefaultObject)) return;
 
-	if (!FNAEdItemUtilities::IsRegisteredItemMetaClass(GetClass())) return;
+	if (!FNAEdItemBridge::IsRegisteredItemMetaClass(GetClass())) return;
     
-    FNAItemBaseTableRow* MetaData = FNAEdItemUtilities::FindItemMetaDataForEditing(GetClass());
+    FNAItemBaseTableRow* MetaData = FNAEdItemBridge::FindItemMetaDataForEditing(GetClass());
 	if (!ensureAlways(MetaData)) return;
 
     
@@ -488,61 +486,82 @@ void ANAItemActor::BackupItemSubobjectPropertiesToMetaData() const
         }
     }
 	
-	FNAEdItemUtilities::MarkMetaDataTableDirty(GetClass());
+	FNAEdItemBridge::MarkMetaDataTableDirty(GetClass());
 }
 
 void ANAItemActor::PostCDOCompiled(const FPostCDOCompiledContext& Context)
 {
 	Super::PostCDOCompiled(Context);
 
-	if (HasAnyFlags(RF_ClassDefaultObject)
-		&& GetClass()->HasAllClassFlags(CLASS_CompiledFromBlueprint)
-		&& !OnItemClassRegisteredToMetaData.IsBound())
-	{
-		OnItemClassRegisteredToMetaData.BindUObject(this, &ThisClass::HandleItemClassRegisteredToMetaData);
-	}
-
 	ReconstructItemSubobjectsFromMetaData();
 }
 
-void ANAItemActor::HandleItemClassRegisteredToMetaData()
+void ANAItemActor::HandleItemClassRegisteredToMetaData(EItemEditorRegistrationPhase RegistrationPhase)
 {
-	if (FNAEdItemUtilities::IsRegisteredItemMetaClass(GetClass()))
+	check(FNAEdItemBridge::IsRegisteredItemMetaClass(GetClass()));
+	check(HasAnyFlags(RF_ClassDefaultObject));
+
+	EnsureForceNonDataOnlyVariableUsed();
+
+	bool bShouldCompile = false;
+	switch (RegistrationPhase)
 	{
-		EnsureForceNonDataOnlyVariableUsed();
-		HandleOnItemClassRegisteredToMetaData_Impl();
+	case EItemEditorRegistrationPhase::DuringInstancing:
+		// 블루프린트 CDO 동적 초기화 후 재컴파일 → 동적 초기화한 내용을 블프 에디터 패널에 반영하기 위함
+		bShouldCompile = true;
+		break;
+	case EItemEditorRegistrationPhase::DuringEditorRuntime:
+		// 에디터 런타임 중 메타데이터에 등록된 경우
+		bShouldCompile = GetCurrentDirtyFlags() != EItemSubobjDirtyFlags::ISDF_None;
+		break;
+	default:
+		check(false);
+		break;
 	}
-	// 에디터 런타임 중 메타데이터에 등록된 경우
-	if (UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized())
+	
+	if (bShouldCompile)
 	{
-		if (GetCurrentDirtyFlags() != EItemSubobjDirtyFlags::ISDF_None)
+		if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
 		{
-			if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
-			{
-				FKismetEditorUtilities::CompileBlueprint(
-					BP,
-					EBlueprintCompileOptions::SkipSave
-					| EBlueprintCompileOptions::SkipGarbageCollection
-					| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
-				);
-				MarkPackageDirty();
-			}
+			FKismetEditorUtilities::CompileBlueprint(
+				BP,
+				EBlueprintCompileOptions::SkipSave
+				| EBlueprintCompileOptions::SkipGarbageCollection
+				| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
+			);
+		}
+		if (RegistrationPhase == EItemEditorRegistrationPhase::DuringEditorRuntime)
+		{
+			MarkPackageDirty();
 		}
 	}
 }
 
 void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 {
-	if (GetWorld() && GetWorld()->HasBegunPlay()) return;
-	
-	if (!FNAEdItemUtilities::IsRegisteredItemMetaClass(GetClass())
-		|| !UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized()) return;
+	check(!GetWorld() || !GetWorld()->HasBegunPlay());
+	if (!FNAEdItemBridge::IsRegisteredItemMetaClass(GetClass())) return;
 
 	ReconstructItemSubobjectsFromMetaData_Impl();
 
+	// ItemCollision는 런타임 때 루트 컴포넌트로 설정되므로, 그 전까지 트랜스폼을 항상 FTransform::Identity로 유지.
 	if (bNeedItemCollision && ItemCollision)
 	{
 		ItemCollision->SetRelativeTransform(FTransform::Identity);
+	}
+	
+	if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
+	{
+		if (!BP->IsPossiblyDirty())
+		{
+			FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
+			FKismetEditorUtilities::CompileBlueprint(
+				BP,
+				EBlueprintCompileOptions::SkipSave
+				| EBlueprintCompileOptions::SkipGarbageCollection
+				| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
+			);
+		}
 	}
 	
 	// 부모, 자식에서 Property로 설정된 컴포넌트들을 조회
@@ -666,7 +685,6 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl()
 						CapsuleCollision->SetCapsuleSize(
 							MetaData->CollisionCapsuleSize.X, MetaData->CollisionCapsuleSize.Y);
 					}
-					ItemCollision->SetRelativeTransform(FTransform::Identity);
 				}
 			}
 			if (bNeedItemMesh && NewItemMeshClass
@@ -722,20 +740,6 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl()
 				}
 			}
 		}
-
-		if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
-		{
-			if (!BP->IsPossiblyDirty())
-			{
-				FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
-				FKismetEditorUtilities::CompileBlueprint(
-					BP,
-					EBlueprintCompileOptions::SkipSave
-					| EBlueprintCompileOptions::SkipGarbageCollection
-					| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
-				);
-			}
-		}
 	}
 }
 
@@ -762,7 +766,7 @@ void ANAItemActor::EnsureForceNonDataOnlyVariableUsed()
 		return;
 	}
 
-	if (!FNAEdItemUtilities::IsRegisteredItemMetaClass(GetClass()))
+	if (!FNAEdItemBridge::IsRegisteredItemMetaClass(GetClass()))
 	{
 		UE_LOG(NAItem, Warning,
 			TEXT("[%hs] 비등록 아이템 클래스에서 호출됨"), __FUNCTION__);
@@ -912,14 +916,14 @@ void ANAItemActor::PreSave(FObjectPreSaveContext SaveContext)
 	Super::PreSave(SaveContext);
 #if WITH_EDITOR
 	if (UNAItemEngineSubsystem::Get()
-		&& FNAEdItemUtilities::IsRegisteredItemMetaClass(GetClass()))
+		&& FNAEdItemBridge::IsRegisteredItemMetaClass(GetClass()))
 	{
 		if (HasAnyFlags(RF_ClassDefaultObject)
 			&& GetClass()->HasAllClassFlags(CLASS_CompiledFromBlueprint)
 			&& !SaveContext.IsProceduralSave())
 		{
 			BackupItemSubobjectPropertiesToMetaData();
-			FNAEdItemUtilities::SaveMetaDataTable(GetClass());
+			FNAEdItemBridge::SaveMetaDataTable(GetClass());
 		}
 	}
 #endif
@@ -1033,7 +1037,6 @@ void ANAItemActor::PostNetReceive()
 void ANAItemActor::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
 }
 
 UNAItemData* ANAItemActor::GetItemData() const

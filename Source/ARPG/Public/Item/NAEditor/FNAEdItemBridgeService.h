@@ -2,17 +2,23 @@
 #pragma once
 
 #if WITH_EDITOR
-#include "NAEditor_Item/ItemEditorBridge/NAEdItemBridgeInterface.h"
+#include "NAEditor_Item/ItemEditorBridge/NAEdItemBridge.h"
 
 class FNAEdItemBridgeService : public INAEdItemBridge
 {
-	
 public:
 	virtual void CheckItemSubsystems() const override;
 	
 	virtual bool IsItemActor(const UClass* InClass) const override;
-	virtual bool IsRegisteredItemMetaClass(UClass* ItemClass) override;
+	virtual bool IsRegisteredItemMetaClass(const UClass* ItemClass) const override;
 	virtual bool IsItemMetaDataInitialized() const override;
+
+	virtual EItemEditorRegistrationPhase GetItemRegistrationPhase(const UClass* InClass) const override;
+	
+	virtual void RegisterNewItemMetaData(UClass* NewItemClass, const UDataTable* InDataTable, FName InRowName) override;
+	virtual void VerifyItemMetaDataRowHandle(UClass* ItemClass, const UDataTable* InDataTable, FName InRowName) override;
+	virtual void MarkMetaDataTableDirty(UClass* ItemClass) override;
+	virtual void SaveMetaDataTable(UClass* ItemClass) override;
 	
 protected:
 	virtual TMap<TSoftClassPtr<AActor>, FDataTableRowHandle>& GetSoftItemMetaData() override;

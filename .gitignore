@@ -109,3 +109,7 @@ Saved
 !ARPG.uproject
 !Config
 !Config/***
+!Scripts
+!Scripts/***
+
+BridgeWrapper/

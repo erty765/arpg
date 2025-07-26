@@ -5,6 +5,8 @@
 #include "Item/EngineSubsystem/NAItemEngineSubsystem.h"
 #include "NAEditor_Item/EditorSubsystem/NAEdItemEditorSubsystem.h"
 #include "Item/ItemActor/NAItemActor.h"
+#include "NAEditor_Misc/NAEdLogCategory.h"
+#include "UObject/SavePackage.h"
 
 void FNAEdItemBridgeService::CheckItemSubsystems() const
 {
@@ -19,19 +21,19 @@ bool FNAEdItemBridgeService::IsItemActor(const UClass* InClass) const
 	return InClass->IsChildOf<ANAItemActor>();
 }
 
-bool FNAEdItemBridgeService::IsRegisteredItemMetaClass(UClass* ItemClass)
+bool FNAEdItemBridgeService::IsRegisteredItemMetaClass(const UClass* ItemClass) const
 {
 	CheckItemSubsystems();
 	if (!IsValid(ItemClass)) return false;
 	
 	if (!UNAItemEngineSubsystem::Get()->IsSoftItemMetaDataInitialized()) return false;
 	
-	UClass* Key = ItemClass;
+	UClass* Key = nullptr;
 	if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(ItemClass)))
 	{
 		Key = BP->GeneratedClass.Get();
 	}
-	Key = Key ? Key : ItemClass;
+	Key = Key ? Key : const_cast<UClass*>(ItemClass);
 	
 	return ItemClass->IsChildOf<ANAItemActor>() &&
 		(UNAItemEngineSubsystem::Get()->ItemMetaData.Contains(Key)
@@ -44,117 +46,23 @@ bool FNAEdItemBridgeService::IsItemMetaDataInitialized() const
 	return UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized();
 }
 
-TMap<TSoftClassPtr<AActor>, FDataTableRowHandle>& FNAEdItemBridgeService::GetSoftItemMetaData()
+EItemEditorRegistrationPhase FNAEdItemBridgeService::GetItemRegistrationPhase(const UClass* InClass) const
 {
 	CheckItemSubsystems();
-	return UNAItemEngineSubsystem::Get()->SoftItemMetaData;
-}
-
-TMap<TSubclassOf<AActor>, FDataTableRowHandle>& FNAEdItemBridgeService::GetItemMetaData()
-{
-	CheckItemSubsystems();
-	return UNAItemEngineSubsystem::Get()->ItemMetaData;
-}
-
-bool FNAEdItemBridgeService::IsSoftItemMetaDataInitialized() const
-{
-	CheckItemSubsystems();
-	return UNAItemEngineSubsystem::Get()->IsSoftItemMetaDataInitialized();
-}
-
-void FNAEdItemBridgeService::SetSoftItemMetaDataInitialized(const bool bInitialized) const
-{
-	CheckItemSubsystems();
-	UNAItemEngineSubsystem::Get()->bSoftItemMetaDataInitialized = bInitialized;
-}
-
-void FNAEdItemBridgeService::BroadcastItemClassRegisteredToMetaData(UClass* ItemClass)
-{
-	CheckItemSubsystems();
-	if (!IsValid(ItemClass) || !ItemClass->IsChildOf<ANAItemActor>()) return;
-	ANAItemActor* ItemActorCDO = Cast<ANAItemActor>(ItemClass->GetDefaultObject(false));
-	if (!IsValid(ItemActorCDO)) return;
-
-	//ItemActorCDO->HandleItemClassRegisteredToMetaData();
 	
-	if (IsRegisteredItemMetaClass(ItemClass))
-	{
-		EnsureForceNonDataOnlyVariableUsed(ItemActorCDO);
-		ItemActorCDO->HandleItemClassRegisteredToMetaData();
-	}
-	// 에디터 런타임 중 메타데이터에 등록된 경우
-	if (UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized())
-	{
-		if (GetCurrentDirtyFlags() != EItemSubobjDirtyFlags::ISDF_None)
-		{
-			if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
-			{
-				FKismetEditorUtilities::CompileBlueprint(
-					BP,
-					EBlueprintCompileOptions::SkipSave
-					| EBlueprintCompileOptions::SkipGarbageCollection
-					| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
-				);
-				MarkPackageDirty();
-			}
-		}
-	}
+	if (!IsValid(InClass)) return EItemEditorRegistrationPhase::None;
+	if (!IsRegisteredItemMetaClass(InClass)) return EItemEditorRegistrationPhase::None;
+	
+	EItemEditorRegistrationPhase Phase = UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized()
+		        ? EItemEditorRegistrationPhase::DuringEditorRuntime
+		        : EItemEditorRegistrationPhase::DuringInstancing;
+	
+	return Phase;
 }
 
-void FNAEdItemBridgeService::SetItemMetaDataInitialized(const bool bInitialized) const
+void FNAEdItemBridgeService::RegisterNewItemMetaData(UClass* NewItemClass, const UDataTable* InDataTable, FName InRowName)
 {
 	CheckItemSubsystems();
-	UNAItemEngineSubsystem::Get()->bItemMetaDataInitialized = bInitialized;
-}
-
-/*
-#include "NAEditor_Item/EditorSubsystem/NAEdItemEditorSubsystem.h"
-#include "Kismet2/BlueprintEditorUtils.h"
-#include "Kismet2/KismetEditorUtilities.h"
-#include "UObject/SavePackage.h"
-
-template <typename Predicator, typename PreCompile, typename PostCompile>
-void PredicateBlueprintRecompile(const ANAItemActor* InObject, Predicator P = [](ANAItemActor*){ return true; }, PreCompile R = [](UBlueprint*){}, PostCompile C = [](UBlueprint*){})
-{
-	if ( P( InObject ) )
-	{
-		if ( UBlueprint* Blueprint = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass( InObject->GetClass() ) ))
-		{
-			R( Blueprint );
-			
-			FKismetEditorUtilities::CompileBlueprint(
-				Blueprint,
-				EBlueprintCompileOptions::SkipSave
-				| EBlueprintCompileOptions::SkipGarbageCollection
-				| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
-				);
-
-			C( Blueprint );
-		}
-	}
-}
-
-bool FNAEdItemUtilities::IsRegisteredItemMetaClass(UClass* ItemClass)
-{
-	const UNAItemEngineSubsystem* Subsystem = UNAItemEngineSubsystem::Get();
-	check( Subsystem );
-	
-	if (!Subsystem->IsSoftItemMetaDataInitialized()) return false;
-	UClass* Key = ItemClass;
-	if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(ItemClass)))
-	{
-		Key = BP->GeneratedClass.Get();
-	}
-	Key = Key ? Key : ItemClass;
-	
-	return ItemClass->IsChildOf<ANAItemActor>() &&
-		(Subsystem->ItemMetaData.Contains(Key) || Subsystem->SoftItemMetaData.Contains(Key));
-}
-
-void FNAEdItemUtilities::RegisterNewItemMetaData(UClass* NewItemClass, const UDataTable* InDataTable, const FName InRowName)
-{
-	UNAItemEngineSubsystem* Subsystem = UNAItemEngineSubsystem::Get();
-	check( Subsystem );
 	
 	if (InDataTable && InRowName.IsValid())
 	{
@@ -169,22 +77,18 @@ void FNAEdItemUtilities::RegisterNewItemMetaData(UClass* NewItemClass, const UDa
 		FDataTableRowHandle NewHandle;
 		NewHandle.DataTable = InDataTable;
 		NewHandle.RowName = InRowName;
-		Subsystem->ItemMetaData.Emplace(NewItemClass, NewHandle);
-		if (ANAItemActor* ItemActorCDO = Cast<ANAItemActor>(NewItemClass->GetDefaultObject(false)))
-		{
-			ItemActorCDO->OnItemClassRegisteredToMetaData.ExecuteIfBound();
-		}
+		UNAItemEngineSubsystem::Get()->ItemMetaData.Emplace(NewItemClass, NewHandle);
+		BroadcastItemClassRegisteredToMetaData(NewItemClass);
 	}
 }
 
-void FNAEdItemUtilities::VerifyItemMetaDataRowHandle(UClass* ItemClass, const UDataTable* InDataTable, const FName InRowName)
+void FNAEdItemBridgeService::VerifyItemMetaDataRowHandle(UClass* ItemClass, const UDataTable* InDataTable, FName InRowName)
 {
-	UNAItemEngineSubsystem* Subsystem = UNAItemEngineSubsystem::Get();
-	check( Subsystem );
+	CheckItemSubsystems();
 	
-	if (Subsystem->IsItemMetaDataInitialized() && IsRegisteredItemMetaClass(ItemClass))
+	if (GetItemRegistrationPhase(ItemClass) == EItemEditorRegistrationPhase::DuringEditorRuntime)
 	{
-		decltype(Subsystem->ItemMetaData[ItemClass])& RowHandle = Subsystem->ItemMetaData[ItemClass];
+		FDataTableRowHandle& RowHandle = UNAItemEngineSubsystem::Get()->ItemMetaData[ItemClass];
 		
 		bool bUpdateRowName = false;
 		bool bUpdateDataTable = false;
@@ -223,22 +127,20 @@ void FNAEdItemUtilities::VerifyItemMetaDataRowHandle(UClass* ItemClass, const UD
 	}
 }
 
-void FNAEdItemUtilities::MarkMetaDataTableDirty(UClass* ItemClass)
+void FNAEdItemBridgeService::MarkMetaDataTableDirty(UClass* ItemClass)
 {
-	const UNAItemEngineSubsystem* Subsystem = UNAItemEngineSubsystem::Get();
-	check( Subsystem );
+	CheckItemSubsystems();
 	
 	if (!IsRegisteredItemMetaClass(ItemClass)) return;
 
 	const FDataTableRowHandle* MetaDataRowHandle = nullptr;
-	if (!Subsystem->IsItemMetaDataInitialized())
+	if (!UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized())
 	{
-		MetaDataRowHandle = &Subsystem->SoftItemMetaData[ItemClass];
-		
+		MetaDataRowHandle = &UNAItemEngineSubsystem::Get()->SoftItemMetaData[ItemClass];
 	}
 	else
 	{
-		MetaDataRowHandle = &Subsystem->ItemMetaData[ItemClass];
+		MetaDataRowHandle = &UNAItemEngineSubsystem::Get()->ItemMetaData[ItemClass];
 	}
 	
 	if (MetaDataRowHandle && !MetaDataRowHandle->IsNull())
@@ -252,23 +154,22 @@ void FNAEdItemUtilities::MarkMetaDataTableDirty(UClass* ItemClass)
 		}
 	}
 }
- 
-void FNAEdItemUtilities::SaveMetaDataTable(UClass* ItemClass)
+
+void FNAEdItemBridgeService::SaveMetaDataTable(UClass* ItemClass)
 {
-	const UNAItemEngineSubsystem* Subsystem = UNAItemEngineSubsystem::Get();
-	check( Subsystem );
+	CheckItemSubsystems();
 	
 	if (!IsRegisteredItemMetaClass(ItemClass)) return;
 
 	const FDataTableRowHandle* MetaDataRowHandle = nullptr;
-	if (!Subsystem->IsItemMetaDataInitialized())
+	if (!UNAItemEngineSubsystem::Get()->IsItemMetaDataInitialized())
 	{
-		MetaDataRowHandle = &Subsystem->SoftItemMetaData[ItemClass];
+		MetaDataRowHandle = &UNAItemEngineSubsystem::Get()->SoftItemMetaData[ItemClass];
 		
 	}
 	else
 	{
-		MetaDataRowHandle = &Subsystem->ItemMetaData[ItemClass];
+		MetaDataRowHandle = &UNAItemEngineSubsystem::Get()->ItemMetaData[ItemClass];
 	}
 	
 	if (MetaDataRowHandle && !MetaDataRowHandle->IsNull())
@@ -297,6 +198,74 @@ void FNAEdItemUtilities::SaveMetaDataTable(UClass* ItemClass)
 			, const_cast<UDataTable*>(ItemMetaDT)
 			, *PackageFilePath
 			, SaveArgs);
+	}
+}
+
+TMap<TSoftClassPtr<AActor>, FDataTableRowHandle>& FNAEdItemBridgeService::GetSoftItemMetaData()
+{
+	CheckItemSubsystems();
+	return UNAItemEngineSubsystem::Get()->SoftItemMetaData;
+}
+
+TMap<TSubclassOf<AActor>, FDataTableRowHandle>& FNAEdItemBridgeService::GetItemMetaData()
+{
+	CheckItemSubsystems();
+	return UNAItemEngineSubsystem::Get()->ItemMetaData;
+}
+
+bool FNAEdItemBridgeService::IsSoftItemMetaDataInitialized() const
+{
+	CheckItemSubsystems();
+	return UNAItemEngineSubsystem::Get()->IsSoftItemMetaDataInitialized();
+}
+
+void FNAEdItemBridgeService::SetSoftItemMetaDataInitialized(const bool bInitialized) const
+{
+	CheckItemSubsystems();
+	UNAItemEngineSubsystem::Get()->bSoftItemMetaDataInitialized = bInitialized;
+}
+
+void FNAEdItemBridgeService::BroadcastItemClassRegisteredToMetaData(UClass* ItemClass)
+{
+	CheckItemSubsystems();
+	if (!IsValid(ItemClass) || !ItemClass->IsChildOf<ANAItemActor>()) return;
+	if (!IsRegisteredItemMetaClass(ItemClass)) return;
+	ANAItemActor* ItemActorCDO = Cast<ANAItemActor>(ItemClass->GetDefaultObject(false));
+	if (!IsValid(ItemActorCDO)) return;
+
+	ItemActorCDO->HandleItemClassRegisteredToMetaData(GetItemRegistrationPhase(ItemClass));
+}
+
+void FNAEdItemBridgeService::SetItemMetaDataInitialized(const bool bInitialized) const
+{
+	CheckItemSubsystems();
+	UNAItemEngineSubsystem::Get()->bItemMetaDataInitialized = bInitialized;
+}
+
+/*
+#include "NAEditor_Item/EditorSubsystem/NAEdItemEditorSubsystem.h"
+#include "Kismet2/BlueprintEditorUtils.h"
+#include "Kismet2/KismetEditorUtilities.h"
+#include "UObject/SavePackage.h"
+
+template <typename Predicator, typename PreCompile, typename PostCompile>
+void PredicateBlueprintRecompile(const ANAItemActor* InObject, Predicator P = [](ANAItemActor*){ return true; }, PreCompile R = [](UBlueprint*){}, PostCompile C = [](UBlueprint*){})
+{
+	if ( P( InObject ) )
+	{
+		if ( UBlueprint* Blueprint = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass( InObject->GetClass() ) ))
+		{
+			R( Blueprint );
+			
+			FKismetEditorUtilities::CompileBlueprint(
+				Blueprint,
+				EBlueprintCompileOptions::SkipSave
+				| EBlueprintCompileOptions::SkipGarbageCollection
+				| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
+				);
+
+			C( Blueprint );
+		}
 	}
 }
 

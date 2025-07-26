@@ -6,7 +6,6 @@
 #include "EditorSubsystem.h"
 #include "NAEdItemEditorSubsystem.generated.h"
 
-DECLARE_LOG_CATEGORY_EXTERN(NAEdItem, Log, All);
 
 /**
  * 
@@ -32,9 +31,6 @@ public:
 	
 protected:
 	void HandlePostEngineInit();
-
-private:
-	class INAEdItemBridge* CachedItemEditorBridge = nullptr;
 };
 
 

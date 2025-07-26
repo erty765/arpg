@@ -3,13 +3,14 @@
 #include "GameFramework/Actor.h"
 #include "Interaction/NAInteractableInterface.h"
 #include "Item/NAItemUseInterface.h"
+
+#if WITH_EDITOR
+#include "NAEditor_Item/ItemEditorCommonTypes.h"
+#endif
+
 #include "NAItemActor.generated.h"
 
-class UTextRenderComponent;
-class UNAMontageCombatComponent;
-class UBillboardComponent;
-class UMaterialInstanceConstant;
-
+#if WITH_EDITOR
 UENUM()
 enum class EItemSubobjDirtyFlags : uint8
 {
@@ -21,6 +22,7 @@ enum class EItemSubobjDirtyFlags : uint8
 	ISDF_MeshProperties			= (1<<3),
 };
 ENUM_CLASS_FLAGS(EItemSubobjDirtyFlags)
+#endif
 
 UCLASS(Abstract)
 class ARPG_API ANAItemActor : public AActor, public INAInteractableInterface, public INAItemUseInterface
@@ -97,7 +99,6 @@ protected:
 	 * 메타데이터 기준에 더 이상 부합하지 않는 불필요한 컴포넌트는 제거.
 	 */
 	virtual void ReconstructItemSubobjectsFromMetaData_Impl();
-	virtual void HandleOnItemClassRegisteredToMetaData_Impl() {}
 #endif
 	
 private:
@@ -110,7 +111,7 @@ private:
 	void ReconstructItemSubobjectsFromMetaData();
 	void BackupItemSubobjectPropertiesToMetaData() const;
 	
-	void HandleItemClassRegisteredToMetaData();
+	void HandleItemClassRegisteredToMetaData(EItemEditorRegistrationPhase RegistrationPhase);
 	void EnsureForceNonDataOnlyVariableUsed();
 #endif
 	
