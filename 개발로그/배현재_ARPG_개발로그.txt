@@ -826,3 +826,58 @@ python Scripts/GenerateBridgeWrapper.py INAEdItemBridge FNAEdItemBridge Source/A
 
 [07/26]
 브릿지 래퍼 파싱 스크립트 추가
+
+[07/27]
+template <typename ItemDTRow_T = FNAItemBaseTableRow>
+		requires TIsDerivedFrom<ItemDTRow_T, FNAItemBaseTableRow>::IsDerived
+	static ItemDTRow_T* FindItemMetaDataForEditing(UClass* ItemClass) { return FNAEdItemBridgeRegistry::Get()->FindItemMetaDataForEditing(ItemClass); }
+
+prefix = re.sub(r'\bstatic\s*$', '', prefix)
+
+// 파싱 테스트
+private:
+	template <class Key, class Value = std::vector<Key>>
+		requires HasKey<Key>
+	Value FindValues(const Key& K);
+
+	template <typename TMap>
+		requires std::is_same_v<TMap, std::map<int, TMap::mapped_type>>
+	const typename TMap::mapped_type& Lookup(const TMap& M);
+
+	template <class U>
+		requires Convertible<U>
+	static inline constexpr U MakeDefault();
+
+	template <typename X, typename Y>
+	__declspec(dllexport)
+	requires std::is_arithmetic_v<X> && std::is_arithmetic_v<Y>
+	static Y ComputeSum(const X& A, const Y& B);
+
+	template <typename T>
+	ARPGEDITOR_API T* GetValid(T* Test)
+	{
+		static_assert(std::is_base_of<UObject, T>::value, "GetValid can only work with UObject-derived classes");
+		return IsValid(Test) ? Test : nullptr;
+	}
+
+template <typename ItemDTRow_T>
+		requires std::is_base_of_v<FNAItemBaseTableRow, ItemDTRow_T>
+	ItemDTRow_T* FindItemMetaDataForEditing(UClass* ItemClass)
+	{
+		return const_cast<ItemDTRow_T*>(static_cast<const ItemDTRow_T*>(FindItemMetaDataForEditingImpl(ItemClass)));
+	}
+
+	template <typename ItemDTRow_T>
+		requires TIsDerivedFrom<FNAItemBaseTableRow, ItemDTRow_T>::IsDerived
+	ItemDTRow_T* FindItemMetaDataForEditingv2(UClass* ItemClass)
+	{
+		return const_cast<ItemDTRow_T*>(static_cast<const ItemDTRow_T*>(FindItemMetaDataForEditingImpl(ItemClass)));
+	}
+
+	// 주석 테스트
+	//virtual void PredicateBlueprintRecompile_FlagWise(const AActor* ItemActor) =0;
+	//virtual void PredicateBlueprintRecompile_DirtyWise(const AActor* ItemActor) =0;
+	/*virtual void PredicateBlueprintRecompile_FlagWise(const AActor* ItemActor) =0;
+	virtual void PredicateBlueprintRecompile_DirtyWise(const AActor* ItemActor) =0;*/
+
+◎정의가 필요 없는 위치에서만 사용되고 있다면 링커 오류는 발생 XX
