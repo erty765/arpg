@@ -201,6 +201,22 @@ void FNAEdItemBridgeService::SaveMetaDataTable(UClass* ItemClass)
 	}
 }
 
+FTableRowBase* FNAEdItemBridgeService::FindItemMetaDataForEditing(UClass* ItemClass)
+{
+	CheckItemSubsystems();
+	
+	if (!IsRegisteredItemMetaClass(ItemClass)) return nullptr;
+
+	UClass* Key = nullptr;
+	if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(ItemClass)))
+	{
+		Key = BP->GeneratedClass.Get();
+	}
+	Key = Key ? Key : ItemClass;
+	
+	return const_cast<FTableRowBase*>(UNAItemEngineSubsystem::Get()->FindItemMetaDataImpl(Key));
+}
+
 TMap<TSoftClassPtr<AActor>, FDataTableRowHandle>& FNAEdItemBridgeService::GetSoftItemMetaData()
 {
 	CheckItemSubsystems();
@@ -296,22 +312,5 @@ void FNAEdItemUtilities::PredicateBlueprintRecompile_DirtyWise(const ANAItemActo
 	const auto& PostCompile = []( UBlueprint* BP ) { FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP); };
 
 	PredicateBlueprintRecompile( InObject, Predicator, PreCompile, PostCompile );
-}
-
-const FTableRowBase* FNAEdItemUtilities::FindItemMetaDataForEditingImpl(UClass* ItemClass)
-{
-	UNAItemEngineSubsystem* Subsystem = UNAItemEngineSubsystem::Get();
-	check( Subsystem );
-	
-	if (!IsRegisteredItemMetaClass(ItemClass)) return nullptr;
-
-	UClass* BPClassKey = nullptr;
-	if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(ItemClass)))
-	{
-		BPClassKey = BP->GeneratedClass.Get();
-	}
-	BPClassKey = BPClassKey ? BPClassKey : ItemClass;
-	
-	return Subsystem->FindItemMetaDataImpl(BPClassKey);
 }*/
 #endif

@@ -50,7 +50,7 @@ public:
       requires TIsDerivedFrom<ItemDTRow_T, FNAItemBaseTableRow>::IsDerived
    const ItemDTRow_T* FindItemMetaData(UClass* ItemClass) const
    {
-      return const_cast<ItemDTRow_T*>( static_cast<const ItemDTRow_T*>(FindItemMetaDataImpl(ItemClass)) );
+      return static_cast<ItemDTRow_T*>(FindItemMetaDataImpl(ItemClass));
    }
    
    const UNAItemData* CreateItemDataByActor(ANAItemActor* ItemActor);

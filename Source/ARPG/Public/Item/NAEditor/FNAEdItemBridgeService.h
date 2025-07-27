@@ -19,6 +19,8 @@ public:
 	virtual void VerifyItemMetaDataRowHandle(UClass* ItemClass, const UDataTable* InDataTable, FName InRowName) override;
 	virtual void MarkMetaDataTableDirty(UClass* ItemClass) override;
 	virtual void SaveMetaDataTable(UClass* ItemClass) override;
+
+	virtual FTableRowBase* FindItemMetaDataForEditing(UClass* ItemClass) override;
 	
 protected:
 	virtual TMap<TSoftClassPtr<AActor>, FDataTableRowHandle>& GetSoftItemMetaData() override;

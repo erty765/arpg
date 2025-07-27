@@ -406,10 +406,9 @@ void ANAItemActor::BackupItemSubobjectPropertiesToMetaData() const
 
 	if (!FNAEdItemBridge::IsRegisteredItemMetaClass(GetClass())) return;
     
-    FNAItemBaseTableRow* MetaData = FNAEdItemBridge::FindItemMetaDataForEditing(GetClass());
+    FNAItemBaseTableRow* MetaData = static_cast<FNAItemBaseTableRow*>(FNAEdItemBridge::FindItemMetaDataForEditing(GetClass()));
 	if (!ensureAlways(MetaData)) return;
-
-    
+	
     const EItemSubobjDirtyFlags CDODirtyFlags = ComputeDirtyFlagsFromMeta(MetaData);
 	if (!EnumHasAnyFlags(CDODirtyFlags
 		, EItemSubobjDirtyFlags::ISDF_CollisionProperties | EItemSubobjDirtyFlags::ISDF_MeshProperties)) return;
