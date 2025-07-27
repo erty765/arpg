@@ -2,18 +2,35 @@ import os
 import re
 import sys
 
+
 def remove_comments(text: str) -> str:
-    """Strip C++ style // and /* */ comments from text."""
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
     text = re.sub(r"//.*", "", text)
     return text
+
+
+def extract_forward_decls(content: str, interface_name: str) -> list:
+    """
+    원본 헤더에서 인터페이스 선언부 이전에 등장하는 forward declaration(struct/class X;)들을 추출합니다.
+    """
+    lines = content.splitlines()
+    forward_decls = []
+    interface_pattern = re.compile(rf'class\s+(?:\w+\s+)?{interface_name}\s*[^{{]*{{')
+    forward_pattern = re.compile(r'^(?:struct|class)\s+\w+\s*;\s*$')
+    for line in lines:
+        if interface_pattern.search(line):
+            break
+        stripped = line.strip()
+        if forward_pattern.match(stripped):
+            forward_decls.append(stripped)
+    return forward_decls
+
 
 def extract_interface_body(content, interface_name):
     pattern = rf"class\s+(?:\w+\s+)?{interface_name}\s*[^{{]*{{"
     match = re.search(pattern, content)
     if not match:
         return None
-
     start = match.end()
     brace_count = 1
     end = start
@@ -27,92 +44,148 @@ def extract_interface_body(content, interface_name):
 
     return content[start:end - 1]
 
+
 def parse_methods_by_access(body: str):
-    """Return function declarations grouped by access specifier."""
     sections = {'public': [], 'protected': [], 'private': []}
     current = 'private'
-
     lines = body.splitlines()
     i = 0
     n = len(lines)
+
     while i < n:
         line = lines[i].strip()
-        if not line:
+
+        # 접근 지정자
+        access_match = re.match(r'^(public|protected|private)\s*:\s*$', line)
+        if access_match:
+            current = access_match.group(1)
             i += 1
             continue
 
-        access = re.match(r'^(public|protected|private)\s*:\s*$', line)
-        if access:
-            current = access.group(1)
-            i += 1
-            continue
-
-        if line.startswith('#'):  # preprocessor directives
+        # 빈 줄, 전처리기 무시
+        if not line or line.startswith('#'):
             i += 1
             continue
 
         sig_lines = [line]
+        brace_depth = line.count('{') - line.count('}')
+        semicolon_found = ';' in line
+        body_detected = '{' in line
 
-        # accumulate lines until ';' or '{'
-        while ';' not in line and '{' not in line and i + 1 < n:
+        # 여러 줄 함수 누적
+        while i + 1 < n and (not semicolon_found and brace_depth <= 0):
             i += 1
-            line = lines[i].strip()
-            sig_lines.append(line)
+            next_line = lines[i].strip()
+            sig_lines.append(next_line)
 
-        # handle body block if present
-        if '{' in line:
-            sig_lines[-1] = line.split('{')[0].strip()
-            brace = line.count('{') - line.count('}')
-            i += 1
-            while brace > 0 and i < n:
-                bline = lines[i]
-                brace += bline.count('{') - bline.count('}')
-                i += 1
-        else:
-            i += 1
+            brace_depth += next_line.count('{') - next_line.count('}')
+            semicolon_found = ';' in next_line
+            if '{' in next_line:
+                body_detected = True
 
-        signature = '\n'.join(l.rstrip() for l in sig_lines).strip()
-        if signature:
-            if not signature.endswith(';'):
-                signature += ';'
+        signature = ' '.join(sig_lines).strip()
+
+        # 함수 바디 제거
+        if '{' in signature:
+            signature = signature.split('{')[0].strip()
+        if not signature.endswith(';'):
+            signature += ';'
+
+        # template + static 정의 함수도 시그니처로 강제 등록
+        if len(signature) > 10:
             sections[current].append(signature)
+
+        # 함수 정의 바디 스킵
+        if body_detected and brace_depth > 0:
+            while i < n and brace_depth > 0:
+                i += 1
+                brace_depth += lines[i].count('{') - lines[i].count('}')
+
+        i += 1
 
     return sections
 
+
 def generate_function_wrapper(signature: str, interface_name: str):
-    """Return wrapper implementation line for a function signature."""
     stripped = signature.strip()
     if not stripped or interface_name in stripped or stripped.startswith("~") or "operator" in stripped:
         return None
 
+     # 끝의 세미콜론 제거
     if stripped.endswith(';'):
         stripped = stripped[:-1].strip()
 
-    prefix = ''
-    while stripped.startswith('template'):
-        m = re.match(r'template\s*<[^>]*>\s*', stripped)
-        if not m:
-            break
-        prefix += m.group(0)
-        stripped = stripped[m.end():].lstrip()
+    # 매크로 제거
+    stripped = re.sub(r'__declspec\([^)]*\)', '', stripped)
+    stripped = re.sub(r'__attribute__\s*\(\([^)]*\)\)', '', stripped)
 
-    if stripped.startswith('requires'):
-        m = re.match(r'requires\s+[^\{;]+\s*', stripped)
-        if m:
-            prefix += m.group(0)
-            stripped = stripped[m.end():].lstrip()
+    # ← 여기에 virtual, override, final, friend, inline, constexpr, static 전부 제거
+    stripped = re.sub(
+        r'\b(?:virtual|override|final|friend|inline|constexpr|static)\b',
+        '',
+        stripped
+    ).strip()
 
-    static_prefix = 'static '
+    # ──────────────────────────────────────────────────────────────────────────
+    # 2) template<…> + optional requires절을 수동 추출
+    prefix = ""
+    if stripped.startswith("template"):
+        # 2-1) 중첩 <> 카운팅으로 template 파라미터 뽑기
+        depth = 0
+        for idx, ch in enumerate(stripped):
+            if ch == '<': depth += 1
+            elif ch == '>':
+                depth -= 1
+                if depth == 0:
+                    template_end = idx + 1
+                    break
+        prefix = stripped[:template_end].strip() + " "
+        stripped = stripped[template_end:].lstrip()
+
+        # 2-2) 이어서 requires절이 있으면 'requires …' 전체를 뽑기
+        if stripped.startswith("requires"):
+            # (1) requires 블록 추출: return-type lookahead에서
+            #     - 공백 제외
+            #     - optional typename 지원
+            req_match = re.match(
+                r'^(requires\s+.+?)(?='
+                  r'\s*(?:const\s+)?(?:typename\s+)?'           # const/typename 허용
+                  r'[\w:\<\>\,\*\&]+'                            # 공백 NO
+                  r'\s+[A-Za-z_]\w*'                             # 함수명
+                  r'\s*\()', 
+                stripped
+            )
+            if req_match:
+                prefix += req_match.group(1).strip() + " "
+                stripped = stripped[req_match.end():].lstrip()
+    # ──────────────────────────────────────────────────────────────────────────
+
+    template_param_text = ""
+    template_params = []
+
+    if prefix.strip().startswith("template"):
+        match = re.search(r'template\s*<([^>]+)>', prefix)
+        if match:
+            template_param_text = match.group(1)
+            # 쉼표 단위로 분리 + 기본값 제거 + typename/class 키워드 제거
+            raw_params = [p.strip() for p in template_param_text.split(',')]
+            for p in raw_params:
+                base = p.split('=')[0].strip()  # 기본값 제거
+                # typename/class 제거 후 파라미터 이름만
+                param_name = re.sub(r'^(typename|class)\s+', '', base)
+                template_params.append(param_name)
+
+    # virtual, inline, constexpr, override, final, friend 키워드 제거
     cleaned = re.sub(r"\b(?:virtual|inline|constexpr|override|final|friend)\b", "", stripped)
-    cleaned = cleaned.strip()
-    if cleaned.startswith('static'):
-        cleaned = cleaned[len('static'):].lstrip()
+    # 남은 static도 다 지워주고 (우리 wrapper에만 한 번 붙일 거야)
+    cleaned = re.sub(r"\bstatic\b", "", cleaned).strip()
 
-    # Remove body brace if any
-    cleaned = cleaned.split('{')[0].strip()
-
-    method_pattern = re.compile(r'(?P<ret>.+?)\s+(?P<name>\w+)\s*\((?P<args>[^\)]*)\)')
-
+    # 리턴 타입 그룹을 non‑lazy → greedy 로 바꿔야 올바른 타입을 통째로 잡아냄
+    method_pattern = re.compile(
+        r'^(?P<ret>[\w:\<\>\,\s\*\&]+)\s+'
+        r'(?P<name>[A-Za-z_]\w*)\s*'
+        r'\((?P<args>[^\)]*)\)'
+    )
     match = method_pattern.match(cleaned)
     if not match:
         return None
@@ -121,164 +194,160 @@ def generate_function_wrapper(signature: str, interface_name: str):
 
     arg_names = []
     args_parts = []
-
     if args.strip():
-        split_args = [a.strip() for a in args.split(",")]
-        for arg in split_args:
+        for arg in [a.strip() for a in args.split(",")]:
             parts = arg.split()
             if len(parts) >= 2:
+                # 인자 이름만 뽑아서 호출 인자로 사용
                 arg_names.append(parts[-1].replace("*", "").replace("&", "").strip())
                 args_parts.append(arg)
 
     arg_list = ", ".join(args_parts)
     call_args = ", ".join(arg_names)
 
-    return f'{prefix}{static_prefix}{return_type} {name}({arg_list})' \
-           f' {{ return BridgeRegistry::Get()->{name}({call_args}); }}'
+    # wrapper 함수는 항상 static. stripped 에 static 이 이미 있었다 해도
+    # 위에서 다 지웠으니 중복 없이 한 번만 붙음.
+    static_prefix = 'static '
 
-def generate_wrapper_struct(namespace, interface_name, body, api_macro=''):
+    # 템플릿 함수면, 호출 시에도 <…> 붙여야 함
+    is_template_function = prefix.strip().startswith("template")
+    template_call_suffix = f"<{', '.join(template_params)}>" if template_params else ""
+
+   # 최종 래퍼 함수 시그니처 + 바디 생성
+    return (
+        f"{prefix}{static_prefix}{return_type} {name}({arg_list})"
+        f" {{ return BridgeRegistry::Get()->{name}{template_call_suffix}({call_args}); }}"
+    )
+
+
+def generate_wrapper_struct(namespace: str, interface_name: str, body: str, api_macro: str = '', forward_decls: list = None) -> str:
     sections = parse_methods_by_access(body)
     lines = []
 
     lines.append("#pragma once\n")
+    # 인터페이스 forward declaration
     lines.append(f"class {interface_name};\n")
+    # 원본 헤더에서 추출한 forward declarations 추가
+    if forward_decls:
+        for decl in forward_decls:
+            if decl and decl != f"class {interface_name};":
+                lines.append(f"{decl}\n")
+
+    # 래퍼 구조체 선언
     if api_macro:
         lines.append(f"struct {api_macro} {namespace} final {{")
     else:
         lines.append(f"struct {namespace} final {{")
     lines.append(f"\tusing BridgeRegistry = TNAEdBridgeRegistry<{interface_name}>;\n")
 
+    # friend declarations
     for line in body.splitlines():
         stripped = line.strip()
         if stripped.startswith("friend") and namespace not in stripped:
             lines.append(f"\t{stripped}")
 
+    # 메서드 래핑
     for access in ['public', 'protected', 'private']:
         if not sections[access]:
             continue
         lines.append(f"\n{access}:")
-        for line in sections[access]:
-            if line.strip().startswith("friend"):
+        for sig in sections[access]:
+            if sig.strip().startswith("friend"):
                 continue
-            wrapper = generate_function_wrapper(line, interface_name)
+            wrapper = generate_function_wrapper(sig, interface_name)
             if wrapper:
                 lines.append(f"\t{wrapper}")
 
     lines.append("};")
     return "\n".join(lines)
 
+
 def insert_wrapper_include_after_macro(header_path: str, interface_name: str, macro_name: str):
     include_line = f'#include "BridgeWrapper/{interface_name}.wrapper.h"\n'
-
     with open(header_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
-
     if any(f'BridgeWrapper/{interface_name}.wrapper.h' in line for line in lines):
-        # print(f"[BridgeWrapper] 이미 include 되어 있음: {interface_name}.wrapper.h")
         return
-
     inserted = False
     for idx, line in enumerate(lines):
         if macro_name in line and interface_name in line:
             lines.insert(idx + 1, include_line)
             inserted = True
             break
-
     if not inserted:
         for idx, line in enumerate(lines):
             if line.strip() == "#pragma once":
                 lines.insert(idx + 1, include_line)
                 inserted = True
                 break
-
     if not inserted:
         lines.insert(0, include_line)
-
     with open(header_path, "w", encoding="utf-8") as f:
         f.writelines(lines)
-
     print(f"[BridgeWrapper] {interface_name}.wrapper.h include 삽입")
+
 
 def insert_friend_struct_if_missing(header_path: str, namespace: str, interface_name: str):
     friend_declaration = f"    friend struct {namespace};\n"
-
     with open(header_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
-
     if any(f"friend struct {namespace}" in line for line in lines):
-        # print(f"[BridgeWrapper] friend struct 이미 존재: {namespace}")
         return
-
     class_decl_idx = -1
     brace_open_idx = -1
-
-    # 정규표현식으로 클래스 선언 검색 (API 매크로 등 허용)
     class_pattern = re.compile(rf'class\s+[\w\s]*\b{interface_name}\b')
-
     for i, line in enumerate(lines):
         if class_pattern.search(line):
             class_decl_idx = i
             break
-
     if class_decl_idx == -1:
         print(f"[BridgeWrapper] 클래스 {interface_name} 선언을 찾을 수 없음")
         return
-
     for j in range(class_decl_idx, len(lines)):
         if '{' in lines[j]:
             brace_open_idx = j
             break
-
     if brace_open_idx == -1:
         print(f"[BridgeWrapper] 클래스 {interface_name}의 '{{' 스코프를 찾을 수 없음")
         return
-
     insert_line = brace_open_idx + 1
     lines.insert(insert_line, friend_declaration)
-
     with open(header_path, "w", encoding="utf-8") as f:
         f.writelines(lines)
-
     print(f"[BridgeWrapper] friend struct 선언 추가")
+
 
 def main():
     if len(sys.argv) != 4:
         print("Usage: python GenerateBridgeWrapper.py <InterfaceName> <NamespaceName> <HeaderFilePath>")
         return
-
     interface_name, namespace, header_path = sys.argv[1:4]
-
     header_dir = os.path.dirname(os.path.abspath(header_path))
     output_dir = os.path.join(header_dir, "BridgeWrapper")
     os.makedirs(output_dir, exist_ok=True)
-
     try:
         with open(header_path, "r", encoding="utf-8") as f:
             content = f.read()
-
         interface_body = extract_interface_body(content, interface_name)
         if not interface_body:
             print(f"[BridgeWrapper] {interface_name} 클래스 정의를 찾을 수 없음")
             return
-
         interface_body = remove_comments(interface_body)
-        
         api_macro_match = re.search(rf'class\s+(\w+)\s+{interface_name}', content)
         api_macro = api_macro_match.group(1) if api_macro_match else ''
-
-        wrapper_code = generate_wrapper_struct(namespace, interface_name, interface_body, api_macro)
-
+        # 원본 헤더에서 forward declarations 추출
+        forward_decls = extract_forward_decls(content, interface_name)
+        wrapper_code = generate_wrapper_struct(namespace, interface_name, interface_body, api_macro, forward_decls)
         output_path = os.path.join(output_dir, f"{interface_name}.wrapper.h")
         with open(output_path, "w", encoding="utf-8") as out_file:
             out_file.write(wrapper_code)
-
         print(f"[BridgeWrapper] {interface_name}.wrapper.h 생성")
     except Exception as e:
         print(f"[BridgeWrapper] 오류 발생: {str(e)}")
         return
-
     insert_wrapper_include_after_macro(header_path, interface_name, "DECLARE_NA_EDITOR_BRIDGE_WRAPPER")
     insert_friend_struct_if_missing(header_path, namespace, interface_name)
+
 
 if __name__ == "__main__":
     main()

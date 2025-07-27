@@ -399,6 +399,7 @@ EItemSubobjDirtyFlags ANAItemActor::ComputeDirtyFlagsFromMeta(const FNAItemBaseT
 	return DirtyFlags;
 }
 
+// Item Actor는 Row Struct에 브로드캐스트만 하고, 실질적인 데이터 백업은 Row Struct에서
 void ANAItemActor::BackupItemSubobjectPropertiesToMetaData() const
 {
 	if (!HasAnyFlags(RF_ClassDefaultObject)) return;

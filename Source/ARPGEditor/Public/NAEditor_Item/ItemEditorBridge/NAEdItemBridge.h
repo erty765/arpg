@@ -2,6 +2,8 @@
 #include "NAEditor_BridgeTemplates/TNAEdBridgeRegistry.h"
 #include "NAEditor_Item/ItemEditorCommonTypes.h"
 
+struct FNAItemBaseTableRow;
+
 class ARPGEDITOR_API INAEdItemBridge
 {
     friend struct FNAEdItemBridge;
@@ -34,19 +36,19 @@ protected:
 	
 	virtual void SetItemMetaDataInitialized(const bool bInitialized) const = 0;
 	
-/*public:
-	virtual void PredicateBlueprintRecompile_FlagWise(const AActor* ItemActor) =0;
-	virtual void PredicateBlueprintRecompile_DirtyWise(const AActor* ItemActor) =0;
+public:
+	//virtual void PredicateBlueprintRecompile_FlagWise(const AActor* ItemActor) = 0;
+	//virtual void PredicateBlueprintRecompile_DirtyWise(const AActor* ItemActor) = 0;
 
 	template <typename ItemDTRow_T = FNAItemBaseTableRow>
-		requires TIsDerivedFrom<ItemDTRow_T, FNAItemBaseTableRow>::IsDerived
-	static ItemDTRow_T* FindItemMetaDataForEditing(UClass* ItemClass)
+		requires std::is_base_of_v<FNAItemBaseTableRow, ItemDTRow_T>
+	ItemDTRow_T* FindItemMetaDataForEditing(UClass* ItemClass)
 	{
 		return const_cast<ItemDTRow_T*>(static_cast<const ItemDTRow_T*>(FindItemMetaDataForEditingImpl(ItemClass)));
 	}
-	
+
 private:
-	static const FTableRowBase* FindItemMetaDataForEditingImpl(UClass* ItemClass);*/
+	virtual FTableRowBase* FindItemMetaDataForEditingImpl(UClass* ItemClass) = 0;
 };
 
 DECLARE_NA_EDITOR_BRIDGE_WRAPPER(FNAEdItemBridge, INAEdItemBridge)
