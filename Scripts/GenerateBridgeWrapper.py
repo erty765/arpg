@@ -27,36 +27,92 @@ def extract_interface_body(content, interface_name):
 
     return content[start:end - 1]
 
-def extract_sections_by_access(body: str):
+def parse_methods_by_access(body: str):
+    """Return function declarations grouped by access specifier."""
     sections = {'public': [], 'protected': [], 'private': []}
-    current_section = 'private'
+    current = 'private'
 
     lines = body.splitlines()
-    buffer = []
+    i = 0
+    n = len(lines)
+    while i < n:
+        line = lines[i].strip()
+        if not line:
+            i += 1
+            continue
 
-    for line in lines:
-        stripped = line.strip()
-        if re.match(r'^(public|protected|private)\s*:\s*$', stripped):
-            if buffer:
-                sections[current_section].extend(buffer)
-                buffer.clear()
-            current_section = stripped.replace(':', '')
+        access = re.match(r'^(public|protected|private)\s*:\s*$', line)
+        if access:
+            current = access.group(1)
+            i += 1
+            continue
+
+        if line.startswith('#'):  # preprocessor directives
+            i += 1
+            continue
+
+        sig_lines = [line]
+
+        # accumulate lines until ';' or '{'
+        while ';' not in line and '{' not in line and i + 1 < n:
+            i += 1
+            line = lines[i].strip()
+            sig_lines.append(line)
+
+        # handle body block if present
+        if '{' in line:
+            sig_lines[-1] = line.split('{')[0].strip()
+            brace = line.count('{') - line.count('}')
+            i += 1
+            while brace > 0 and i < n:
+                bline = lines[i]
+                brace += bline.count('{') - bline.count('}')
+                i += 1
         else:
-            buffer.append(stripped)
+            i += 1
 
-    if buffer:
-        sections[current_section].extend(buffer)
+        signature = '\n'.join(l.rstrip() for l in sig_lines).strip()
+        if signature:
+            if not signature.endswith(';'):
+                signature += ';'
+            sections[current].append(signature)
+
     return sections
 
-def generate_function_wrapper(line, interface_name):
-    stripped = line.strip()
+def generate_function_wrapper(signature: str, interface_name: str):
+    """Return wrapper implementation line for a function signature."""
+    stripped = signature.strip()
     if not stripped or interface_name in stripped or stripped.startswith("~") or "operator" in stripped:
         return None
 
-    cleaned = re.sub(r"\b(?:virtual|static|inline|constexpr|override|final)\b", "", stripped)
-    cleaned = cleaned.strip()
+    if stripped.endswith(';'):
+        stripped = stripped[:-1].strip()
 
-    method_pattern = re.compile(r'^(?P<ret>[^\(]+?)\s+(?P<name>\w+)\s*\((?P<args>[^\)]*)\)\s*(?:const)?\s*(?:=\s*0)?\s*;')
+    prefix = ''
+    while stripped.startswith('template'):
+        m = re.match(r'template\s*<[^>]*>\s*', stripped)
+        if not m:
+            break
+        prefix += m.group(0)
+        stripped = stripped[m.end():].lstrip()
+
+    if stripped.startswith('requires'):
+        m = re.match(r'requires\s+[^\{;]+\s*', stripped)
+        if m:
+            prefix += m.group(0)
+            stripped = stripped[m.end():].lstrip()
+
+    static_prefix = 'static '
+    cleaned = re.sub(r"\b(?:virtual|inline|constexpr|override|final|friend)\b", "", stripped)
+    cleaned = cleaned.strip()
+    if cleaned.startswith('static'):
+        cleaned = cleaned[len('static'):].lstrip()
+
+    # Remove body brace if any
+    cleaned = cleaned.split('{')[0].strip()
+
+    method_pattern = re.compile(r'(?P<ret>.+?)\s+(?P<name>\w+)\s*\((?P<args>[^\)]*)\)')
+
     match = method_pattern.match(cleaned)
     if not match:
         return None
@@ -77,11 +133,11 @@ def generate_function_wrapper(line, interface_name):
     arg_list = ", ".join(args_parts)
     call_args = ", ".join(arg_names)
 
-    return f'static {return_type} {name}({arg_list})' \
+    return f'{prefix}{static_prefix}{return_type} {name}({arg_list})' \
            f' {{ return BridgeRegistry::Get()->{name}({call_args}); }}'
 
 def generate_wrapper_struct(namespace, interface_name, body, api_macro=''):
-    sections = extract_sections_by_access(body)
+    sections = parse_methods_by_access(body)
     lines = []
 
     lines.append("#pragma once\n")
