@@ -112,6 +112,7 @@ def generate_function_wrapper(signature: str, interface_name: str):
     cleaned = cleaned.split('{')[0].strip()
 
     method_pattern = re.compile(r'(?P<ret>.+?)\s+(?P<name>\w+)\s*\((?P<args>[^\)]*)\)')
+
     match = method_pattern.match(cleaned)
     if not match:
         return None
