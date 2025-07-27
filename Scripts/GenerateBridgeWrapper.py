@@ -2,6 +2,12 @@ import os
 import re
 import sys
 
+def remove_comments(text: str) -> str:
+    """Strip C++ style // and /* */ comments from text."""
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    text = re.sub(r"//.*", "", text)
+    return text
+
 def extract_interface_body(content, interface_name):
     pattern = rf"class\s+(?:\w+\s+)?{interface_name}\s*[^{{]*{{"
     match = re.search(pattern, content)
@@ -43,15 +49,19 @@ def extract_sections_by_access(body: str):
     return sections
 
 def generate_function_wrapper(line, interface_name):
-    if interface_name in line or line.startswith("~") or "operator" in line:
+    stripped = line.strip()
+    if not stripped or interface_name in stripped or stripped.startswith("~") or "operator" in stripped:
         return None
 
-    method_pattern = re.compile(r'^\s*virtual\s+([^\(]+?)\s+(\w+)\s*\((.*?)\)\s*(const)?\s*=\s*0\s*;')
-    match = method_pattern.match(line.strip())
+    cleaned = re.sub(r"\b(?:virtual|static|inline|constexpr|override|final)\b", "", stripped)
+    cleaned = cleaned.strip()
+
+    method_pattern = re.compile(r'^(?P<ret>[^\(]+?)\s+(?P<name>\w+)\s*\((?P<args>[^\)]*)\)\s*(?:const)?\s*(?:=\s*0)?\s*;')
+    match = method_pattern.match(cleaned)
     if not match:
         return None
 
-    return_type, name, args, _ = match.groups()  # const 무시
+    return_type, name, args = match.group('ret').strip(), match.group('name'), match.group('args')
 
     arg_names = []
     args_parts = []
@@ -194,6 +204,8 @@ def main():
         if not interface_body:
             print(f"[BridgeWrapper] {interface_name} 클래스 정의를 찾을 수 없음")
             return
+
+        interface_body = remove_comments(interface_body)
         
         api_macro_match = re.search(rf'class\s+(\w+)\s+{interface_name}', content)
         api_macro = api_macro_match.group(1) if api_macro_match else ''
