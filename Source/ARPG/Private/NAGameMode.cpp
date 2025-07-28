@@ -2,6 +2,7 @@
 
 #include "NAGameMode.h"
 
+#include "EngineUtils.h"
 #include "NACharacter.h"
 #include "NAGameStateBase.h"
 #include "NAInGameHUD.h"
@@ -9,7 +10,6 @@
 #include "NAPlayerState.h"
 #include "Assets/Interface/NAManagedAsset.h"
 #include "GameFramework/PlayerStart.h"
-#include "Item/ItemActor/NAItemActor.h"
 #include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
 

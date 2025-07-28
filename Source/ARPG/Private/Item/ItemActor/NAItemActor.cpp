@@ -15,12 +15,7 @@
 
 #if WITH_EDITOR
 #include "Item/NAEditor/FNAEdItemBridgeService.h"
-#include "Engine/SCS_Node.h"
-#include "Engine/SimpleConstructionScript.h"
-#include "Kismet2/BlueprintEditorUtils.h"
-#include "Kismet2/KismetEditorUtilities.h"
-#include "NAEditor/BlueprintGraphNode/NAEdHideableGraphNode_VariableGet.h"
-#include "BlueprintVariableNodeSpawner.h"
+#include "NAEditor_Item/ItemActorEditor/NAEdItemActorEditorUtils.h"
 #endif
 
 class UBlueprintVariableNodeSpawner;
@@ -406,7 +401,7 @@ void ANAItemActor::BackupItemSubobjectPropertiesToMetaData() const
 
 	if (!FNAEdItemBridge::IsRegisteredItemMetaClass(GetClass())) return;
     
-    FNAItemBaseTableRow* MetaData = static_cast<FNAItemBaseTableRow*>(FNAEdItemBridge::FindItemMetaDataForEditing(GetClass()));
+    FNAItemBaseTableRow* MetaData = reinterpret_cast<FNAItemBaseTableRow*>(FNAEdItemBridge::FindItemMetaDataForEditing(GetClass()));
 	if (!ensureAlways(MetaData)) return;
 	
     const EItemSubobjDirtyFlags CDODirtyFlags = ComputeDirtyFlagsFromMeta(MetaData);
@@ -502,7 +497,7 @@ void ANAItemActor::HandleItemClassRegisteredToMetaData(EItemEditorRegistrationPh
 	check(HasAnyFlags(RF_ClassDefaultObject));
 
 	EnsureForceNonDataOnlyVariableUsed();
-
+	
 	bool bShouldCompile = false;
 	switch (RegistrationPhase)
 	{
@@ -523,18 +518,15 @@ void ANAItemActor::HandleItemClassRegisteredToMetaData(EItemEditorRegistrationPh
 	{
 		if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
 		{
-			FKismetEditorUtilities::CompileBlueprint(
-				BP,
-				EBlueprintCompileOptions::SkipSave
-				| EBlueprintCompileOptions::SkipGarbageCollection
-				| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
-			);
+			FNAEdItemActorEditorUtils::CompileBlueprintWithOptionalStructuralMark(BP);
 		}
 		if (RegistrationPhase == EItemEditorRegistrationPhase::DuringEditorRuntime)
 		{
 			MarkPackageDirty();
 		}
 	}
+
+	MarkPackageDirty();
 }
 
 void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
@@ -549,18 +541,16 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 	{
 		ItemCollision->SetRelativeTransform(FTransform::Identity);
 	}
-	
-	if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
+
+	if (!HasAnyFlags(RF_ClassDefaultObject))
 	{
-		if (!BP->IsPossiblyDirty())
+		if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
 		{
-			FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
-			FKismetEditorUtilities::CompileBlueprint(
-				BP,
-				EBlueprintCompileOptions::SkipSave
-				| EBlueprintCompileOptions::SkipGarbageCollection
-				| EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing
-			);
+			if (!BP->IsPossiblyDirty())
+			{
+				FNAEdItemActorEditorUtils::CompileBlueprintWithOptionalStructuralMark(
+					BP, true);
+			}
 		}
 	}
 	
@@ -714,7 +704,19 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl()
 
 		if (UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(GetClass()))
 		{
-			TArray<USCS_Node*> SCSNodes = BPGC->SimpleConstructionScript->GetAllNodes();
+			if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionShape)
+				&& IsValid(ItemCollision))
+			{
+				FNAEdItemActorEditorUtils::UpdateSCSParentComponentReference(
+					BPGC, TEXT("ItemCollision"), ItemCollision->GetFName());
+			}
+			if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_MeshType)
+				&& IsValid(ItemMesh))
+			{
+				FNAEdItemActorEditorUtils::UpdateSCSParentComponentReference(
+					BPGC, TEXT("ItemMesh"), ItemMesh->GetFName());
+			}
+			/*TArray<USCS_Node*> SCSNodes = BPGC->SimpleConstructionScript->GetAllNodes();
 			if (SCSNodes.Num() > 0)
 			{
 				for (USCS_Node* SCSNode : SCSNodes)
@@ -738,49 +740,54 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl()
 						}
 					}
 				}
-			}
+			}*/
 		}
 	}
 }
 
 void ANAItemActor::EnsureForceNonDataOnlyVariableUsed()
 {
-	if (GetWorld() && GetWorld()->IsPlayInEditor())
-	{
-		UE_LOG(NAItem, Warning,
-			TEXT("[%hs] 잘못된 호출: PIE 실행 중 호출됨"), __FUNCTION__);
-		return;
-	}
-
-	if (!HasAnyFlags(RF_ClassDefaultObject))
-	{
-		UE_LOG(NAItem, Warning,
-			TEXT("[%hs] 잘못된 호출: CDO 외 객체에서 호출됨"), __FUNCTION__);
-		return;
-	}
-
 	if (!UNAItemEngineSubsystem::Get())
 	{
 		UE_LOG(NAItem, Warning,
-			TEXT("[%hs] 아이템 엔진 서브시스템 미초기화 상태"), __FUNCTION__);
+		       TEXT("[%hs] 아이템 엔진 서브시스템 미초기화 상태"), __FUNCTION__);
 		return;
 	}
-
 	if (!FNAEdItemBridge::IsRegisteredItemMetaClass(GetClass()))
 	{
 		UE_LOG(NAItem, Warning,
 			TEXT("[%hs] 비등록 아이템 클래스에서 호출됨"), __FUNCTION__);
 		return;
 	}
-
+	if (!HasAnyFlags(RF_ClassDefaultObject))
+	{
+		UE_LOG(NAItem, Warning,
+			TEXT("[%hs] 잘못된 호출: CDO 외 객체에서 호출됨"), __FUNCTION__);
+		return;
+	}
+	if (GetWorld() && GetWorld()->IsPlayInEditor())
+	{
+		UE_LOG(NAItem, Warning,
+			TEXT("[%hs] 잘못된 호출: PIE 실행 중 호출됨"), __FUNCTION__);
+		return;
+	}
 	UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass()));
 	if (!BP)
 	{
-		UE_LOG(NAItem, Warning,
-			TEXT("[%hs] 블루프린트 클래스 아님"), __FUNCTION__);
+		UE_LOG(NAItem, Warning, TEXT("[%hs] 블루프린트 클래스 아님"), __FUNCTION__);
 		return;
 	}
-
+	if (!bForceNonDataOnlyBlueprint)
+	{
+		FProperty* Prop = FindFProperty<FProperty>(
+			GetClass()
+			, GET_MEMBER_NAME_CHECKED(ANAItemActor, bForceNonDataOnlyBlueprint));
+		bForceNonDataOnlyBlueprint
+			= FNAEdItemActorEditorUtils::EnsureForceNonDataOnlyVariableAdded(
+				BP, Prop);
+	}
+	
+	/*
 	if (BP->bRunConstructionScriptOnDrag)
 	{
 		BP->bRunConstructionScriptOnDrag = false;
@@ -851,7 +858,7 @@ void ANAItemActor::EnsureForceNonDataOnlyVariableUsed()
 		{
 			BP->MarkPackageDirty();
 		}
-	}
+	}*/
 }
 #endif
 

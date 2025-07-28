@@ -49,6 +49,9 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+#if WITH_EDITOR
+	virtual void PostCDOCompiled(const FPostCDOCompiledContext& Context) override;
+#endif
 
 public:
 	virtual void Tick(float DeltaTime) override;
@@ -88,18 +91,6 @@ protected:
 	
 	/** 기존 루트 컴포넌트를 제거하고, ItemCollision을 새로운 루트로 설정한 뒤, 기존 자식 컴포넌트들을 이관 */
 	virtual void ReplaceRootWithItemCollisionIfNeeded();
-
-#if WITH_EDITOR
-	virtual void PostCDOCompiled(const FPostCDOCompiledContext& Context) override;
-	
-	EItemSubobjDirtyFlags GetCurrentDirtyFlags() const;
-	virtual EItemSubobjDirtyFlags ComputeDirtyFlagsFromMeta(const FNAItemBaseTableRow* MetaData) const;
-	/**
-	 * 현재 아이템 메타데이터를 기반으로 동적 서브오브젝트(콜리전 및 메시 컴포넌트 등)를 재구성.
-	 * 메타데이터 기준에 더 이상 부합하지 않는 불필요한 컴포넌트는 제거.
-	 */
-	virtual void ReconstructItemSubobjectsFromMetaData_Impl();
-#endif
 	
 private:
 	void InitItemSubobjectsPhysics();
@@ -108,6 +99,18 @@ private:
 	void InitCheckIfChildActor();
 	
 #if WITH_EDITOR
+public:
+	EItemSubobjDirtyFlags GetCurrentDirtyFlags() const;
+	
+protected:
+	virtual EItemSubobjDirtyFlags ComputeDirtyFlagsFromMeta(const FNAItemBaseTableRow* MetaData) const;
+	/**
+	 * 현재 아이템 메타데이터를 기반으로 동적 서브오브젝트(콜리전 및 메시 컴포넌트 등)를 재구성.
+	 * 메타데이터 기준에 더 이상 부합하지 않는 불필요한 컴포넌트는 제거.
+	 */
+	virtual void ReconstructItemSubobjectsFromMetaData_Impl();
+	
+private:
 	void ReconstructItemSubobjectsFromMetaData();
 	void BackupItemSubobjectPropertiesToMetaData() const;
 	

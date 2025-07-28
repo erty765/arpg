@@ -5,7 +5,7 @@
 
 #include "NAPlayerController.h"
 #include "ARPG/ARPG.h"
-#include "ARPG/NAGlobalDelegate.h"
+#include "NAGlobalDelegate.h"
 #include "Components/ListView.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/PlayerState.h"

@@ -29,7 +29,7 @@ public:
     virtual void PredicateBlueprintRecompile_DirtyWise(const AActor* ItemActor) = 0;
     template <typename ItemDTRow_T = FNAItemBaseTableRow>
     	requires std::is_base_of_v<FNAItemBaseTableRow, ItemDTRow_T>
-    ItemDTRow_T* FindItemMetaDataForEditing(UClass* ItemClass)
+    ItemDTRow_T* FindItemMetaDataForEditing_V0(UClass* ItemClass)
     {
     	return const_cast<ItemDTRow_T*>(static_cast<const ItemDTRow_T*>(FindItemMetaDataForEditingImpl(ItemClass)));
     }
@@ -37,6 +37,8 @@ private:
 	virtual FTableRowBase* FindItemMetaDataForEditingImpl(UClass* ItemClass) = 0;*/
     
     virtual FTableRowBase* FindItemMetaDataForEditing(UClass* ItemClass) = 0;
+
+	
     
 protected:
 	virtual TMap<TSoftClassPtr<AActor>, FDataTableRowHandle>& GetSoftItemMetaData() = 0;
@@ -50,8 +52,7 @@ protected:
 	virtual void SetItemMetaDataInitialized(const bool bInitialized) const = 0;
 
 private:
-    
 };
 
-DECLARE_NA_EDITOR_BRIDGE_WRAPPER(FNAEdItemBridge, INAEdItemBridge)
-#include "BridgeWrapper/INAEdItemBridge.wrapper.h"
+DECLARE_NA_EDITOR_BRIDGE_WRAPPER_EXTERN(FNAEdItemBridge, INAEdItemBridge)
+#include "INAEdItemBridge.wrapper.h"

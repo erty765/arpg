@@ -6,25 +6,25 @@ template<typename BridgeType>
 class TNAEdBridgeRegistry
 {
 public:
-	static void Register(BridgeType* Service)
+	void Register(BridgeType* Service)
 	{
 		check(Service);
 		Bridge = Service;
 	}
 	
-	static void Unregister()
+	void Unregister()
 	{
-		Bridge =nullptr;
+		Bridge = nullptr;
 	}
 
-	static BridgeType* Get()
+	BridgeType* Get()
 	{
 		checkf(Bridge != nullptr, TEXT("NAEditorBridgeService has not been registered."));
 		return Bridge;
 	}
 	
 private:
-	static inline BridgeType* Bridge = nullptr;
+	BridgeType* Bridge = nullptr;
 };
 
 /**
@@ -44,10 +44,17 @@ private:
  *
  * @param NamespaceName : 자동 생성될 래퍼 구조체의 이름입니다. 통상적으로 'F' + InterfaceName 형식으로 작성합니다.
  *                        예) INAEdItemBridge → FNAEdItemBridge
- * @param InterfaceName : 파싱의 대상이 되는 순수 가상 인터페이스 클래스 이름입니다.
+ * @param InterfaceName : 파싱의 대상이 되는 순수 가상 인터페이스 클래스 이름입니다. 
  *                        반드시 'class InterfaceName' 선언부가 해당 헤더에 존재해야 합니다.
  */
+#define DECLARE_NA_EDITOR_BRIDGE_WRAPPER_EXTERN(NamespaceName, InterfaceName) \
+	extern TNAEdBridgeRegistry<InterfaceName> G##NamespaceName##RegistryImpl_Inst; \
+	//struct ARPGEDITOR_API NamespaceName##Registry { static InterfaceName* Get(); static void Register(InterfaceName*); static void Unregister(); }; 
+
 #define DECLARE_NA_EDITOR_BRIDGE_WRAPPER(NamespaceName, InterfaceName) \
-	extern struct NamespaceName; \
-	using NamespaceName##Registry = TNAEdBridgeRegistry<InterfaceName>; \
-	static_assert(true, "DECLARE_NA_EDITOR_BRIDGE_WRAPPER OK");
+	TNAEdBridgeRegistry<InterfaceName> G##NamespaceName##RegistryImpl_Inst; \
+	//InterfaceName* NamespaceName##Registry::Get() { return GBridgeRegistry_##NamespaceName.Get(); } \
+	//void NamespaceName##Registry::Register(InterfaceName* Ptr) { GBridgeRegistry_##NamespaceName.Register(Ptr); } \
+	//void NamespaceName##Registry::Unregister() { GBridgeRegistry_##NamespaceName.Unregister(); }
+	
+

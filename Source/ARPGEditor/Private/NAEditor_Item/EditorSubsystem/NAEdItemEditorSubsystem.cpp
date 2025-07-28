@@ -24,7 +24,7 @@ void UNAEdItemEditorSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	UE_LOG(NAEdItem, Display, TEXT("[%hs] 아이템 메타데이터 인스턴싱 진행"), __FUNCTION__);
 	
 	FNAEdItemBridge::GetItemMetaData().Reserve(FNAEdItemBridge::GetSoftItemMetaData().Num());
-	for (const auto& Pair :FNAEdItemBridge::GetSoftItemMetaData())
+	for (const auto& Pair : FNAEdItemBridge::GetSoftItemMetaData())
 	{
 		UClass* NewItemClass = Pair.Key.LoadSynchronous();
 		check(FNAEdItemBridge::IsItemActor(NewItemClass));

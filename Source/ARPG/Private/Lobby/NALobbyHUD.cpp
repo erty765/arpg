@@ -3,8 +3,8 @@
 
 #include "Lobby/NALobbyHUD.h"
 #include "CineCameraActor.h"
+#include "EngineUtils.h"
 #include "Blueprint/UserWidget.h"	
-#include "Item/ItemActor/NAItemActor.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Lobby/NALobbyWidget.h"

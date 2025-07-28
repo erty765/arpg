@@ -29,26 +29,30 @@ public class ARPGEditor : ModuleRules
 		});
 		
 		if (Target.bBuildEditor)
-		{
-			string scriptPath = Path.Combine(ModuleDirectory, "../../Scripts/ScanForBridgeWrappers.py");
-			// 절대 경로로 변환
+		{ 
+		// GenerateBridgeWrappers 스크립트 추가 ///////////////////////////////////////////////////////////////////////////
+			
+		
+			string moduleDir = Path.GetFullPath(ModuleDirectory);
+			string scriptPath = Path.Combine(moduleDir, "../../Scripts/GenerateBridgeWrappers.py");
 			string fullScriptPath = Path.GetFullPath(scriptPath);
-
+/*
 			if (File.Exists(fullScriptPath))
 			{
 				string pythonExe = "python";
 				
-				Logger.LogInformation("Running wrapper generator script: " + fullScriptPath);
+				Logger.LogInformation("Running wrapper generator: " + fullScriptPath);
                 
 				var startInfo = new ProcessStartInfo
 				{
 					FileName = pythonExe,
-					Arguments = $"\"{fullScriptPath}\"",
+					Arguments = $"\"{fullScriptPath}\" \"{moduleDir}\"",
 					UseShellExecute = false,
 					RedirectStandardOutput = true,
 					RedirectStandardError = true,
-					CreateNoWindow = true
-				};
+					CreateNoWindow = true,
+                    WorkingDirectory = Path.GetDirectoryName(fullScriptPath)
+                };
 
 				using (Process process = Process.Start(startInfo))
 				{
@@ -69,6 +73,21 @@ public class ARPGEditor : ModuleRules
 			{
 				Logger.LogWarning($"[BridgeWrapper] Python script not found at: {fullScriptPath}");
 			}
+			*/
+			
+		// BridgeWrapper include path 추가 (ProjectRoot/Intermediate/BridgeWrappers/ModuleName/) ////////////////////////
+			
+			string projectRoot = Path.GetFullPath(Path.Combine(moduleDir, "..", ".."));
+			string moduleName = Path.GetFileName(moduleDir);
+			
+			string wrapperIncludePath = Path.Combine(
+				projectRoot,
+				"Intermediate",
+				"BridgeWrappers",
+				moduleName);
+
+			PublicIncludePaths.Add(wrapperIncludePath);
+			Logger.LogInformation("[BridgeWrapper] IncludePath 추가: " + wrapperIncludePath);
 		}
 	}
 }

@@ -6,7 +6,7 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
 #include "NAGameStateBase.h"
-#include "ARPG/NAGlobalDelegate.h"
+#include "NAGlobalDelegate.h"
 #include "Combat/PhysicsHandleComponent/NAKineticComponent.h"
 #include "Item/PlaceableItem/Door/NADoor.h"
 #include "Lobby/NASessionListWidget.h"

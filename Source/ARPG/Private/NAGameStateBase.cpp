@@ -7,7 +7,7 @@
 #include "NAPlayerState.h"
 #include "Algo/AllOf.h"
 #include "ARPG/ARPG.h"
-#include "ARPG/NAGlobalDelegate.h"
+#include "NAGlobalDelegate.h"
 #include "Combat/UserWidget/NAMissionFailedWidget.h"
 #include "Components/WidgetComponent.h"
 #include "Net/UnrealNetwork.h"

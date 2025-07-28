@@ -10,6 +10,7 @@
 #include "Inventory/Widget/NAInventoryWidget.h"
 #include "Item/PickableItem/NAWeapon.h"
 #include "Item/PickableItem/NAMedPack.h"
+#include "Misc/NALogCategory.h"
 
 // Sets default values for this component's properties
 UNAInventoryComponent::UNAInventoryComponent()

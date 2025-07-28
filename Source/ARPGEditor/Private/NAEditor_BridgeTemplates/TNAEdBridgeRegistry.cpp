@@ -2,4 +2,3 @@
 
 
 #include "ARPGEditor/Public/NAEditor_BridgeTemplates/TNAEdBridgeRegistry.h"
-

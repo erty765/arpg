@@ -3,9 +3,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "EngineUtils.h"
 #include "Subsystems/EngineSubsystem.h"
 #include "Item/ItemData/NAItemData.h"
-
 #include "NAItemEngineSubsystem.generated.h"
 
 UCLASS(BlueprintType)
@@ -50,7 +50,7 @@ public:
       requires TIsDerivedFrom<ItemDTRow_T, FNAItemBaseTableRow>::IsDerived
    const ItemDTRow_T* FindItemMetaData(UClass* ItemClass) const
    {
-      return static_cast<ItemDTRow_T*>(FindItemMetaDataImpl(ItemClass));
+      return static_cast<ItemDTRow_T*>(const_cast<FTableRowBase*>(FindItemMetaDataImpl(ItemClass)));
    }
    
    const UNAItemData* CreateItemDataByActor(ANAItemActor* ItemActor);
@@ -76,7 +76,7 @@ public:
     */
    bool DestroyRuntimeItem(UNAItemData* ItemData, const bool bDestroyItemActor = false, AActor* Instigator = nullptr);
 
-   template <typename ItemActorT, typename Func>
+   template <typename ItemActorT = ANAItemActor, typename Func>
       requires TIsDerivedFrom<ItemActorT, ANAItemActor>::IsDerived
    void ForEachItemActorOfClass(UWorld* World, Func&& Predicate)
    {
