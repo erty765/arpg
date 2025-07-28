@@ -834,8 +834,8 @@ template <typename ItemDTRow_T = FNAItemBaseTableRow>
 
 prefix = re.sub(r'\bstatic\s*$', '', prefix)
 
-// 파싱 테스트
 private:
+	// 파싱 테스트
 	template <class Key, class Value = std::vector<Key>>
 		requires HasKey<Key>
 	Value FindValues(const Key& K);
@@ -881,3 +881,12 @@ template <typename ItemDTRow_T>
 	virtual void PredicateBlueprintRecompile_DirtyWise(const AActor* ItemActor) =0;*/
 
 ◎정의가 필요 없는 위치에서만 사용되고 있다면 링커 오류는 발생 XX
+
+[07/28]
+python GenerateAllBridgeWrappers.py D:\arpg_ReviseItemSubsys\Source\ARPGEditor
+
+◎ BridgeRegistry 구조 변경: 정적 템플릿 클래스로 하면 BridgeRegistry가 메모리에 안올라옴.
+→ BridgeRegistry를 일반 인스턴스 클래스로 선언하고, BridgeRegistry에 대한 래퍼 구조체를 따로 마련. (타입디파인 빼고, 래퍼구조체로)
+◎ 파서 스크립트 수정 필요: 타입 디파인 우항에 래퍼 구조체 작성하기
+	└ 래퍼 구조체 정의부(헤더 매크로 2번째 줄): 파서에게 넘기기 (+dll 익스포트 매크로 붙이기)
+	└  씨피피 매크로: 인스턴스 선언부만 남기고 나머지(래퍼 구조체 메서드 정의부)는 파서에게 넘기기
