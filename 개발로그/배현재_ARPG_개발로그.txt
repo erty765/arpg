@@ -890,3 +890,32 @@ python GenerateAllBridgeWrappers.py D:\arpg_ReviseItemSubsys\Source\ARPGEditor
 ◎ 파서 스크립트 수정 필요: 타입 디파인 우항에 래퍼 구조체 작성하기
 	└ 래퍼 구조체 정의부(헤더 매크로 2번째 줄): 파서에게 넘기기 (+dll 익스포트 매크로 붙이기)
 	└  씨피피 매크로: 인스턴스 선언부만 남기고 나머지(래퍼 구조체 메서드 정의부)는 파서에게 넘기기
+
+[07/29]
+◎ DataTable.h / DataTableFactory.h
+
+//struct ARPGEDITOR_API NamespaceName##Registry { static InterfaceName* Get(); static void Register(InterfaceName*); static void Unregister(); }; 
+
+//InterfaceName* NamespaceName##Registry::Get() { return GBridgeRegistry_##NamespaceName.Get(); } \
+	//void NamespaceName##Registry::Register(InterfaceName* Ptr) { GBridgeRegistry_##NamespaceName.Register(Ptr); } \
+	//void NamespaceName##Registry::Unregister() { GBridgeRegistry_##NamespaceName.Unregister(); }
+
+
+    # @TODO: BridgeRegistry 래퍼 구조체 파싱하는 함수 추가하기
+
+struct ARPGEDITOR_API FNAEdItemBridgeRegistry final {
+public:
+	static void Register(INAEdItemBridge* Service)
+	{
+		return TNAEdBridgeRegistry<INAEdItemBridge>::Register(Service);
+	}
+	static void Unregister()
+	{
+		return TNAEdBridgeRegistry<INAEdItemBridge>::Unregister();
+	}
+	static INAEdItemBridge* Get()
+	{
+		return TNAEdBridgeRegistry<INAEdItemBridge>::Get();
+	}
+};
+파싱 스크립트 이제 진짜 끝 끝
