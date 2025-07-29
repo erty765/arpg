@@ -37,8 +37,6 @@ private:
 	virtual FTableRowBase* FindItemMetaDataForEditingImpl(UClass* ItemClass) = 0;*/
     
     virtual FTableRowBase* FindItemMetaDataForEditing(UClass* ItemClass) = 0;
-
-	
     
 protected:
 	virtual TMap<TSoftClassPtr<AActor>, FDataTableRowHandle>& GetSoftItemMetaData() = 0;

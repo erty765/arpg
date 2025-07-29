@@ -2,7 +2,6 @@
 
 using System.Diagnostics;
 using System.IO;
-using EpicGames.Core;
 using Microsoft.Extensions.Logging;
 using UnrealBuildTool;
 
@@ -30,18 +29,17 @@ public class ARPGEditor : ModuleRules
 		
 		if (Target.bBuildEditor)
 		{ 
-		// GenerateBridgeWrappers 스크립트 추가 ///////////////////////////////////////////////////////////////////////////
-			
+			/* GenerateBridgeWrappers 스크립트 추가 */
 		
 			string moduleDir = Path.GetFullPath(ModuleDirectory);
 			string scriptPath = Path.Combine(moduleDir, "../../Scripts/GenerateBridgeWrappers.py");
 			string fullScriptPath = Path.GetFullPath(scriptPath);
-/*
+
 			if (File.Exists(fullScriptPath))
 			{
 				string pythonExe = "python";
 				
-				Logger.LogInformation("Running wrapper generator: " + fullScriptPath);
+				Logger.LogInformation("Running wrapper generator '" + fullScriptPath + "'");
                 
 				var startInfo = new ProcessStartInfo
 				{
@@ -71,11 +69,10 @@ public class ARPGEditor : ModuleRules
 			}
 			else
 			{
-				Logger.LogWarning($"[BridgeWrapper] Python script not found at: {fullScriptPath}");
+				Logger.LogWarning($"[BridgeWrapper] Python script not found at '{fullScriptPath}'");
 			}
-			*/
 			
-		// BridgeWrapper include path 추가 (ProjectRoot/Intermediate/BridgeWrappers/ModuleName/) ////////////////////////
+			/* BridgeWrapper include path 추가 (ProjectRoot/Intermediate/BridgeWrappers/ModuleName/) */
 			
 			string projectRoot = Path.GetFullPath(Path.Combine(moduleDir, "..", ".."));
 			string moduleName = Path.GetFileName(moduleDir);
@@ -87,7 +84,7 @@ public class ARPGEditor : ModuleRules
 				moduleName);
 
 			PublicIncludePaths.Add(wrapperIncludePath);
-			Logger.LogInformation("[BridgeWrapper] IncludePath 추가: " + wrapperIncludePath);
+			Logger.LogInformation("[BridgeWrapper] IncludePath 추가 '" + wrapperIncludePath +"'");
 		}
 	}
 }
