@@ -542,18 +542,6 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 		ItemCollision->SetRelativeTransform(FTransform::Identity);
 	}
 
-	if (!HasAnyFlags(RF_ClassDefaultObject))
-	{
-		if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
-		{
-			if (!BP->IsPossiblyDirty())
-			{
-				FNAEdItemActorEditorUtils::CompileBlueprintWithOptionalStructuralMark(
-					BP, true);
-			}
-		}
-	}
-	
 	// 부모, 자식에서 Property로 설정된 컴포넌트들을 조회
 	// 최종적으로 프로퍼티에 남은 컴포넌트 주소들을 확인
 	TSet<UActorComponent*> ItemActorSubobjects;
@@ -588,7 +576,10 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 void ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl()
 {
 	const FNAItemBaseTableRow* MetaData = UNAItemEngineSubsystem::Get()->FindItemMetaData(GetClass());
-	check(MetaData);
+	if (!ensureMsgf(MetaData, TEXT("[%hs] 아이템 메타데이터 없음: %s"), __FUNCTION__, *GetNameSafe(GetClass())))
+	{
+		return;
+	}
 
 	const EItemSubobjDirtyFlags DirtyFlags = ComputeDirtyFlagsFromMeta(MetaData);
 	bool bShouldReconstruct = false;
