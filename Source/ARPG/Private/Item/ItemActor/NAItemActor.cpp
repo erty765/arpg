@@ -1,4 +1,4 @@
-
+﻿
 #include "Item/ItemActor/NAItemActor.h"
 
 #include "NACharacter.h"
@@ -534,12 +534,26 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 	check(!GetWorld() || !GetWorld()->HasBegunPlay());
 	if (!FNAEdItemBridge::IsRegisteredItemMetaClass(GetClass())) return;
 
-	ReconstructItemSubobjectsFromMetaData_Impl();
+	const bool bReconstructed = ReconstructItemSubobjectsFromMetaData_Impl();
 
 	// ItemCollision는 런타임 때 루트 컴포넌트로 설정되므로, 그 전까지 트랜스폼을 항상 FTransform::Identity로 유지.
 	if (bNeedItemCollision && ItemCollision)
 	{
 		ItemCollision->SetRelativeTransform(FTransform::Identity);
+	}
+
+	// 에디터 월드의 인스턴스에서 서브오브젝트가 실제로 교체된 경우에만, 재할당된 프로퍼티/어태치 관계를
+	// 델타 직렬화로 굳히기 위해 BP를 재컴파일. 반드시 현재 콜스택 밖(다음 틱)에서 — 여기서 동기 컴파일하면
+	// 리인스턴싱으로 this의 클래스가 REINST_가 되어 DEADCLASS/bAllRegistered 크래시가 난다.
+	if (bReconstructed
+		&& !HasAnyFlags(RF_ClassDefaultObject)
+		&& !IsTemplate()
+		&& GetWorld() && GetWorld()->WorldType == EWorldType::Editor)
+	{
+		if (UBlueprint* BP = Cast<UBlueprint>(UBlueprint::GetBlueprintFromClass(GetClass())))
+		{
+			FNAEdItemActorEditorUtils::RequestDeferredCompile(BP, /*bMarkStructurallyModified=*/true);
+		}
 	}
 
 	// 부모, 자식에서 Property로 설정된 컴포넌트들을 조회
@@ -573,12 +587,12 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 	}
 }
 
-void ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl()
+bool ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl()
 {
 	const FNAItemBaseTableRow* MetaData = UNAItemEngineSubsystem::Get()->FindItemMetaData(GetClass());
 	if (!ensureMsgf(MetaData, TEXT("[%hs] 아이템 메타데이터 없음: %s"), __FUNCTION__, *GetNameSafe(GetClass())))
 	{
-		return;
+		return false;
 	}
 
 	const EItemSubobjDirtyFlags DirtyFlags = ComputeDirtyFlagsFromMeta(MetaData);
@@ -734,6 +748,8 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl()
 			}*/
 		}
 	}
+
+	return bShouldReconstruct;
 }
 
 void ANAItemActor::EnsureForceNonDataOnlyVariableUsed()

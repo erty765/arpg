@@ -3,6 +3,7 @@
 
 #include "NAEditor_Item/EditorSubsystem/NAEdItemEditorSubsystem.h"
 #include "NAEditor_Item/ItemEditorBridge/NAEdItemBridge.h"
+#include "NAEditor_Item/ItemActorEditor/NAEdItemActorEditorUtils.h"
 
 #include "NAEditor_Misc/NAEdLogCategory.h"
 
@@ -48,6 +49,7 @@ void UNAEdItemEditorSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UNAEdItemEditorSubsystem::Deinitialize()
 {
+	FNAEdItemActorEditorUtils::ShutdownDeferredCompiles();
 	Super::Deinitialize();
 }
 

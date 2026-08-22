@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "GameFramework/Actor.h"
 #include "Interaction/NAInteractableInterface.h"
@@ -107,8 +107,9 @@ protected:
 	/**
 	 * 현재 아이템 메타데이터를 기반으로 동적 서브오브젝트(콜리전 및 메시 컴포넌트 등)를 재구성.
 	 * 메타데이터 기준에 더 이상 부합하지 않는 불필요한 컴포넌트는 제거.
+	 * @return 서브오브젝트가 실제로 교체(재구성)되었으면 true
 	 */
-	virtual void ReconstructItemSubobjectsFromMetaData_Impl();
+	virtual bool ReconstructItemSubobjectsFromMetaData_Impl();
 	
 private:
 	void ReconstructItemSubobjectsFromMetaData();
