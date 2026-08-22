@@ -112,6 +112,8 @@ protected:
 	virtual bool ReconstructItemSubobjectsFromMetaData_Impl();
 	/** 교체된 서브오브젝트의 어태치 자식을 NewParent(없으면 Stale의 부모)로 이관한 뒤 Stale을 파괴 */
 	void DestroyStaleItemSubobject(USceneComponent* Stale, USceneComponent* NewParent);
+	/** 네이티브 컴포넌트의 어태치 부모/소켓을 아키타입(CDO 템플릿) 기준으로 복구 */
+	void RestoreNativeAttachmentsFromArchetype();
 	
 private:
 	void ReconstructItemSubobjectsFromMetaData();

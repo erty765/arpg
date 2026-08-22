@@ -588,6 +588,47 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 			}
 		}
 	}
+	if (!HasAnyFlags(RF_ClassDefaultObject) && !IsTemplate())
+	{
+		RestoreNativeAttachmentsFromArchetype();
+	}
+}
+
+void ANAItemActor::RestoreNativeAttachmentsFromArchetype()
+{
+	// 코드(생성자)로 정의된 네이티브 컴포넌트의 어태치 관계는 인스턴스에서 편집 대상이 아니다.
+	// 과거 버그로 인스턴스에 StubRoot 등 잘못된 AttachParent가 직렬화돼 있으면, 아키타입(CDO 템플릿)의
+	// 부모/소켓과 같은 이름의 인스턴스 컴포넌트로 되돌린다.
+	TMap<FName, USceneComponent*> SceneCompsByName;
+	for (UActorComponent* Comp : GetComponents())
+	{
+		if (USceneComponent* SC = Cast<USceneComponent>(Comp))
+		{
+			SceneCompsByName.Add(SC->GetFName(), SC);
+		}
+	}
+
+	for (const TPair<FName, USceneComponent*>& Pair : SceneCompsByName)
+	{
+		USceneComponent* SC = Pair.Value;
+		if (!IsValid(SC) || SC->CreationMethod != EComponentCreationMethod::Native) continue;
+
+		const USceneComponent* Archetype = Cast<USceneComponent>(SC->GetArchetype());
+		if (!Archetype || !Archetype->GetAttachParent()) continue;
+
+		const FName WantedParentName = Archetype->GetAttachParent()->GetFName();
+		const FName WantedSocket = Archetype->GetAttachSocketName();
+		USceneComponent* const* WantedParentPtr = SceneCompsByName.Find(WantedParentName);
+		if (!WantedParentPtr || !IsValid(*WantedParentPtr) || *WantedParentPtr == SC) continue;
+
+		const bool bParentOk = SC->GetAttachParent() == *WantedParentPtr;
+		const bool bSocketOk = SC->GetAttachSocketName() == WantedSocket;
+		if (bParentOk && bSocketOk) continue;
+
+		UE_LOG(NAItem, Warning, TEXT("[%hs] %s: '%s' 어태치 복구 %s(%s) -> %s(%s)"), __FUNCTION__, *GetName(), *SC->GetName(),
+			*GetNameSafe(SC->GetAttachParent()), *SC->GetAttachSocketName().ToString(), *WantedParentName.ToString(), *WantedSocket.ToString());
+		SC->AttachToComponent(*WantedParentPtr, FAttachmentTransformRules::KeepRelativeTransform, WantedSocket);
+	}
 }
 
 void ANAItemActor::DestroyStaleItemSubobject(USceneComponent* Stale, USceneComponent* NewParent)
