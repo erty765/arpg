@@ -578,13 +578,45 @@ void ANAItemActor::ReconstructItemSubobjectsFromMetaData()
 			{
 				if (!ItemActorSubobjects.Contains(OwnedActorComp))
 				{
-					OwnedSceneComp->ClearFlags(RF_Standalone | RF_Public);
-					OwnedSceneComp->DestroyComponent();
-					RemoveInstanceComponent(OwnedSceneComp);
+					// 교체된 ItemCollision/ItemMesh의 잔재라면 어태치 자식을 새 컴포넌트로 이관한 뒤 제거
+					USceneComponent* NewParent = nullptr;
+					const FString StaleName = OwnedSceneComp->GetName();
+					if (StaleName.StartsWith(TEXT("ItemCollision"))) NewParent = ItemCollision;
+					else if (StaleName.StartsWith(TEXT("ItemMesh"))) NewParent = ItemMesh;
+					DestroyStaleItemSubobject(OwnedSceneComp, NewParent);
 				}
 			}
 		}
 	}
+}
+
+void ANAItemActor::DestroyStaleItemSubobject(USceneComponent* Stale, USceneComponent* NewParent)
+{
+	if (!IsValid(Stale)) return;
+
+	if (!NewParent || NewParent == Stale)
+	{
+		NewParent = Stale->GetAttachParent();
+	}
+
+	// AttachChildren 배열을 복사해서 순회 (AttachToComponent가 원본 배열을 수정함)
+	TArray<USceneComponent*> attachedChildren(Stale->GetAttachChildren());
+	for (USceneComponent* Child : attachedChildren)
+	{
+		if (!IsValid(Child) || Child == NewParent) continue;
+		if (NewParent)
+		{
+			Child->AttachToComponent(NewParent, FAttachmentTransformRules::KeepRelativeTransform, Child->GetAttachSocketName());
+		}
+		else
+		{
+			Child->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
+		}
+	}
+
+	Stale->ClearFlags(RF_Standalone | RF_Public);
+	Stale->DestroyComponent();
+	RemoveInstanceComponent(Stale);
 }
 
 bool ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl()
@@ -597,6 +629,8 @@ bool ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl()
 
 	const EItemSubobjDirtyFlags DirtyFlags = ComputeDirtyFlagsFromMeta(MetaData);
 	bool bShouldReconstruct = false;
+	USceneComponent* StaleItemCollision = nullptr;
+	USceneComponent* StaleItemMesh = nullptr;
 	
 	UClass* NewItemCollisionClass = nullptr;
 	if (EnumHasAnyFlags(DirtyFlags, EItemSubobjDirtyFlags::ISDF_CollisionShape))
@@ -620,9 +654,9 @@ bool ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl()
 		if (NewItemCollisionClass && ItemCollision
 			&& ItemCollision->GetClass() != NewItemCollisionClass)
 		{
-			ItemCollision->ClearFlags(RF_Standalone | RF_Public);
-			ItemCollision->DestroyComponent();
-			RemoveInstanceComponent(ItemCollision);
+			// 새 컴포넌트를 프로퍼티에 재할당한 뒤, 어태치 자식을 이관하고 제거 (아래 참조)
+			StaleItemCollision = ItemCollision;
+			ItemCollision = nullptr;
 		}
 	}
 
@@ -645,9 +679,8 @@ bool ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl()
 		if (NewItemMeshClass && ItemMesh
 			&& ItemMesh->GetClass() != NewItemMeshClass)
 		{
-			ItemMesh->ClearFlags(RF_Standalone | RF_Public);
-			ItemMesh->DestroyComponent();
-			RemoveInstanceComponent(ItemMesh);
+			StaleItemMesh = ItemMesh;
+			ItemMesh = nullptr;
 		}
 	}
 
@@ -705,6 +738,17 @@ bool ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl()
 					}
 				}
 			}
+		}
+
+		// 교체 전 컴포넌트에 코드로 어태치돼 있던 자식(예: 무기의 AmmoIndicator/MuzzleFlash)을 새 컴포넌트로 이관한 뒤 제거.
+		// 그냥 DestroyComponent하면 엔진이 자식을 파괴된 컴포넌트의 부모(StubRoot)에 붙여 계층이 평탄해진다.
+		if (StaleItemCollision)
+		{
+			DestroyStaleItemSubobject(StaleItemCollision, ItemCollision);
+		}
+		if (StaleItemMesh)
+		{
+			DestroyStaleItemSubobject(StaleItemMesh, ItemMesh);
 		}
 
 		if (UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(GetClass()))

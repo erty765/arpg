@@ -110,6 +110,8 @@ protected:
 	 * @return 서브오브젝트가 실제로 교체(재구성)되었으면 true
 	 */
 	virtual bool ReconstructItemSubobjectsFromMetaData_Impl();
+	/** 교체된 서브오브젝트의 어태치 자식을 NewParent(없으면 Stale의 부모)로 이관한 뒤 Stale을 파괴 */
+	void DestroyStaleItemSubobject(USceneComponent* Stale, USceneComponent* NewParent);
 	
 private:
 	void ReconstructItemSubobjectsFromMetaData();
