@@ -1,0 +1,21 @@
+### 3) 계층 평탄화 ensure (ARPG-backup-2026.08.22-17.35.53.log) — DestroyComponent 경로
+[2026.08.22-17.34.12:410][250]LogOutputDevice: Error: Component 'StaticMeshComponent /Engine/Transient.World_4:PersistentLevel.BP_PlasmaCutter_C_0.ItemMesh(Static)' has 'NAAmmoIndicatorComponent /Engine/Transient.World_4:PersistentLevel.BP_PlasmaCutter_C_0.AmmoIndicatorComponent' in its AttachChildren array, however, 'NAAmmoIndicatorComponent /Engine/Transient.World_4:PersistentLevel.BP_PlasmaCutter_C_0.AmmoIndicatorComponent' believes it is attached to 'SceneComponent /Engine/Transient.World_4:PersistentLevel.BP_PlasmaCutter_C_0.StubRootComponent'
+
+UnrealEditor-Engine.dll!UActorComponent::DestroyComponent() [C:\UE_5.4\Engine\Source\Runtime\Engine\Private\Components\ActorComponent.cpp:1556]
+UnrealEditor-Engine.dll!USceneComponent::DestroyComponent() [C:\UE_5.4\Engine\Source\Runtime\Engine\Private\Components\SceneComponent.cpp:1188]
+UnrealEditor-ARPG.dll!ANAItemActor::ReconstructItemSubobjectsFromMetaData() [C:\Users\BHJ\Repos\My_Portfolio\arpg-ReviseItem_Subsys\Source\ARPG\Private\Item\ItemActor\NAI
+UnrealEditor-ARPG.dll!ANAItemActor::OnConstruction() [C:\Users\BHJ\Repos\My_Portfolio\arpg-ReviseItem_Subsys\Source\ARPG\Private\Item\ItemActor\NAItemActor.cpp:879]
+UnrealEditor-ARPG.dll!ANAWeapon::OnConstruction() [C:\Users\BHJ\Repos\My_Portfolio\arpg-ReviseItem_Subsys\Source\ARPG\Private\Item\PickableItem\NAWeapon.cpp:115]
+UnrealEditor-Engine.dll!AActor::ExecuteConstruction() [C:\UE_5.4\Engine\Source\Runtime\Engine\Private\ActorConstruction.cpp:974]
+UnrealEditor-UnrealEd.dll!FActorReplacementHelper::Finalize() [C:\UE_5.4\Engine\Source\Editor\UnrealEd\Private\Kismet2\KismetReinstanceUtilities.cpp:1552]
+UnrealEditor-UnrealEd.dll!FBlueprintCompileReinstancer::ReplaceInstancesOfClass_Inner() [C:\UE_5.4\Engine\Source\Editor\UnrealEd\Private\Kismet2\KismetReinstanceUtilities
+UnrealEditor-UnrealEd.dll!FBlueprintCompileReinstancer::BatchReplaceInstancesOfClass() [C:\UE_5.4\Engine\Source\Editor\UnrealEd\Private\Kismet2\KismetReinstanceUtilities.
+UnrealEditor-Kismet.dll!FBlueprintCompilationManagerImpl::FlushReinstancingQueueImpl() [C:\UE_5.4\Engine\Source\Editor\Kismet\Private\BlueprintCompilationManager.cpp:1966
+UnrealEditor-Kismet.dll!FBlueprintCompilationManagerImpl::CompileSynchronouslyImpl() [C:\UE_5.4\Engine\Source\Editor\Kismet\Private\BlueprintCompilationManager.cpp:315]
+UnrealEditor-Kismet.dll!FBlueprintCompilationManager::CompileSynchronously() [C:\UE_5.4\Engine\Source\Editor\Kismet\Private\BlueprintCompilationManager.cpp:3716]
+UnrealEditor-UnrealEd.dll!FKismetEditorUtilities::CompileBlueprint() [C:\UE_5.4\Engine\Source\Editor\UnrealEd\Private\Kismet2\Kismet2.cpp:777]
+UnrealEditor-Kismet.dll!FBlueprintEditor::Compile() [C:\UE_5.4\Engine\Source\Editor\Kismet\Private\BlueprintEditor.cpp:4167]
+UnrealEditor-Kismet.dll!TBaseSPMethodDelegateInstance<0,FBlueprintEditor,1,void __cdecl(void),FDefaultDelegateUserPolicy>::ExecuteIfSafe() [C:\UE_5.4\Engine\Source\Runtim
+UnrealEditor-Slate.dll!FUIAction::Execute() [C:\UE_5.4\Engine\Source\Runtime\Slate\Public\Framework\Commands\UIAction.h:139]
+UnrealEditor-Slate.dll!FUICommandList::ExecuteAction() [C:\UE_5.4\Engine\Source\Runtime\Slate\Private\Framework\Commands\UICommandList.cpp:117]
+UnrealEditor-Slate.dll!SToolBarButtonBlock::OnClicked() [C:\UE_5.4\Engine\Source\Runtime\Slate\Private\Framework\MultiBox\SToolBarButtonBlock.cpp:446]

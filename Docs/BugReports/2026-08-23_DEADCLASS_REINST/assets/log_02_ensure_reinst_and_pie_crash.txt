@@ -1,0 +1,34 @@
+### 2) check를 경고로 바꾼 뒤 — ARPG-backup-2026.08.22-16.33.42.log (원본 삭제됨, 조사 당시 발췌)
+
+## 맵 로드: 같은 액터가 150ms 사이에 "클래스 조회 성공 → DEADCLASS → 조회 실패"
+[2026.08.22-16.32.07:058][  0]NAItem: Warning: [UNAItemEngineSubsystem::CreateItemDataByActor] 아이템 데이터 생성 완료. ID: PlasmaCutter_1, 관련 액터: BP_PlasmaCutter_C_1
+[2026.08.22-16.32.07:058][  0]NAItem: Warning: [UNAItemEngineSubsystem::CreateItemDataByActor] 아이템 데이터 생성 완료. ID: PlasmaRifle_2, 관련 액터: BP_PlasmaRifle_C_1
+[2026.08.22-16.32.07:058][  0]NAItem: Warning: [UNAItemEngineSubsystem::CreateItemDataByActor] 아이템 데이터 생성 완료. ID: SmallMedPack_3, 관련 액터: BP_Small_MedPack_C_1
+[2026.08.22-16.32.07:058][  0]NAItem: Warning: [UNAItemEngineSubsystem::CreateItemDataByActor] 아이템 데이터 생성 완료. ID: Test2_4, 관련 액터: BP_Test2_C_2
+[2026.08.22-16.32.07:058][  0]NAItem: Warning: [UNAItemEngineSubsystem::CreateItemDataByActor] 아이템 데이터 생성 완료. ID: Test_5, 관련 액터: BP_Test_C_1
+[2026.08.22-16.32.07:239][  0]LogActorComponent: RegisterComponentWithWorld: Owner belongs to a DEADCLASS
+[2026.08.22-16.32.07:239][  0]LogActorComponent: RegisterComponentWithWorld: Owner belongs to a DEADCLASS
+[2026.08.22-16.32.07:239][  0]LogActorComponent: RegisterComponentWithWorld: Owner belongs to a DEADCLASS
+[2026.08.22-16.32.07:239][  0]LogActorComponent: RegisterComponentWithWorld: Owner belongs to a DEADCLASS
+[2026.08.22-16.32.07:239][  0]LogTemp: Warning: [ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl] 아이템 메타데이터 없음.
+[2026.08.22-16.32.07:241][  0]LogTemp: Warning: [ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl] 아이템 메타데이터 없음.
+[2026.08.22-16.32.07:244][  0]LogTemp: Warning: [ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl] 아이템 메타데이터 없음.
+[2026.08.22-16.32.07:246][  0]LogTemp: Warning: [ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl] 아이템 메타데이터 없음.
+[2026.08.22-16.32.07:251][  0]LogTemp: Warning: [ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl] 아이템 메타데이터 없음.
+
+## 디테일 패널의 "BP_PlasmaCutter 편집" 링크 클릭 → 레벨 액터의 클래스가 REINST_
+[2026.08.22-16.33.35:452][107]LogOutputDevice: Error: Ensure condition failed: NewObject->IsA(this->GeneratedClass)  [File:C:\UE_5.4\Engine\Source\Runtime\Engine\Private\Blueprint.cpp] [Line: 890]
+[2026.08.22-16.33.35:452][107]LogOutputDevice: Error: Type mismatch: Expected BP_PlasmaCutter_C, Found REINST_BP_PlasmaCutter_C_139
+UnrealEditor-Engine.dll!UBlueprint::SetObjectBeingDebugged()                                   [Blueprint.cpp:890]
+UnrealEditor-UnrealEd.dll!`FEditorClassUtils::GetSourceLink'::`5'::Local::OnEditBlueprintClicked() [EditorClassUtils.cpp:144]
+UnrealEditor-UnrealEd.dll!SHyperlink::Hyperlink_OnClicked()
+UnrealEditor-Slate.dll!SButton::ExecuteOnClick()
+
+## PIE 진입 → 죽은 클래스 액터가 복제되어 루트 컴포넌트 등록 실패
+[2026.08.22-16.33.42:744][136]LogActorComponent: RegisterComponentWithWorld: Owner belongs to a DEADCLASS
+[2026.08.22-16.33.42:744][136]LogActorComponent: RegisterComponentWithWorld: Owner belongs to a DEADCLASS
+[2026.08.22-16.33.42:744][136]LogActorComponent: RegisterComponentWithWorld: Owner belongs to a DEADCLASS
+[2026.08.22-16.33.42:744][136]LogActor: Error: AActor::IncrementalRegisterComponents parent component '/Engine/Transient.World_2:PersistentLevel.BP_PlasmaCutter_C_0.StubRootComponent' cannot be registered in actor '/Engine/Transient.World_2:PersistentLevel.BP_PlasmaCutter_C_0'
+[2026.08.22-16.33.42:745][136]LogWindows: Error: appError called: Assertion failed: bAllRegistered [File:C:\UE_5.4\Engine\Source\Runtime\Engine\Private\Actor.cpp] [Line: 5371]
+
+## 참고: 같은 날 16:31 백업 로그(671MB)는 PIE 중 DEADCLASS 2,987,616줄 (PIE 월드 액터도 OnConstruction마다 재컴파일 반복)

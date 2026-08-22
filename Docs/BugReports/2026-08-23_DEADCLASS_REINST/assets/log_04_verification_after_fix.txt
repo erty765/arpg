@@ -1,0 +1,24 @@
+### 4) 수정 후 검증 (Orca.log / Capture.log): 로드 시 자동 복구 + PIE 계층
+[ANAItemActor::RestoreNativeAttachmentsFromArchetype] BP_PlasmaCutter_C_1: 'MuzzleFlashComponent' 어태치 복구 StubRootComponent(None) -> ItemMesh(Static)(Muzzle)
+[ANAItemActor::RestoreNativeAttachmentsFromArchetype] BP_PlasmaCutter_C_1: 'AmmoIndicatorComponent' 어태치 복구 StubRootComponent(None) -> ItemMesh(Static)(Indicator)
+[HierDump][ReplaceRoot:after] BP_PlasmaCutter_C_1 (class=BP_PlasmaCutter_C, world=Level_NAMainGame, root=ItemCollision(Box))
+[HierDump]    ItemCollision(Box)             parent=None                   socket=None       method=0 archetype=/Game/00_ProjectNA/01_Bluepr
+[HierDump]    ItemMesh(Static)               parent=ItemCollision(Box)     socket=None       method=0 archetype=/Game/00_ProjectNA/01_Bluepr
+[HierDump]    TriggerSphere                  parent=ItemCollision(Box)     socket=None       method=0 archetype=/Game/00_ProjectNA/01_Bluepr
+[HierDump]    ItemWidgetComponent            parent=ItemCollision(Box)     socket=None       method=0 archetype=/Game/00_ProjectNA/01_Bluepr
+[HierDump]    MuzzleFlashComponent           parent=ItemMesh(Static)       socket=Muzzle     method=0 archetype=/Game/00_ProjectNA/01_Bluepr
+[HierDump]    AmmoIndicatorComponent         parent=ItemMesh(Static)       socket=Indicator  method=0 archetype=/Game/00_ProjectNA/01_Bluepr
+[HierDump][ReplaceRoot:before] BP_PlasmaCutter_C_2 (class=BP_PlasmaCutter_C, world=Level_NAMainGame, root=StubRootComponent)
+[HierDump]    StubRootComponent              parent=None                   socket=None       method=0 archetype=/Game/00_ProjectNA/01_Bluepr
+--
+[HierDump][ReplaceRoot:after] BP_PlasmaCutter_C_2 (class=BP_PlasmaCutter_C, world=Level_NAMainGame, root=ItemCollision(Box))
+[HierDump]    ItemCollision(Box)             parent=None                   socket=None       method=0 archetype=/Game/00_ProjectNA/01_Bluepr
+[HierDump]    ItemMesh(Static)               parent=ItemCollision(Box)     socket=None       method=0 archetype=/Game/00_ProjectNA/01_Bluepr
+[HierDump]    TriggerSphere                  parent=ItemCollision(Box)     socket=None       method=0 archetype=/Game/00_ProjectNA/01_Bluepr
+[HierDump]    ItemWidgetComponent            parent=ItemCollision(Box)     socket=None       method=0 archetype=/Game/00_ProjectNA/01_Bluepr
+[HierDump]    MuzzleFlashComponent           parent=ItemMesh(Static)       socket=Muzzle     method=0 archetype=/Game/00_ProjectNA/01_Bluepr
+[HierDump]    AmmoIndicatorComponent         parent=ItemMesh(Static)       socket=Indicator  method=0 archetype=/Game/00_ProjectNA/01_Bluepr
+[2026.08.22-18.26.38:233][277]LogWorld: Bringing World /Game/00_ProjectNA/02_Level/UEDPIE_0_Level_NAMainGame.Level_NAMainGame up for play (m
+NAGameStateBase /Game/00_ProjectNA/02_Level/UEDPIE_0_Level_NAMainGame.Level_NAMainGame:PersistentLevel.NAGameStateBase_0 has natively added 
+
+Capture.log DEADCLASS/ensure/assert count: 0

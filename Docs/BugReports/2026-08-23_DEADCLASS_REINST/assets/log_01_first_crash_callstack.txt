@@ -1,0 +1,19 @@
+### 1) 첫 크래시 — ARPG-backup-2026.08.22-16.24.24.log (원본은 로그 로테이션으로 삭제됨, 조사 당시 발췌)
+
+[2026.08.22-16.23.40:674][  0]Cmd: MAP LOAD FILE="../../../../Users/BHJ/Repos/My_Portfolio/arpg-ReviseItem_Subsys/Content/00_ProjectNA/02_Level/Level_NAMainGame.umap" TEMPLATE=0 SHOWPROGRESS=1 FEATURELEVEL=4
+[2026.08.22-16.23.41:458][  0]LogActorComponent: RegisterComponentWithWorld: Owner belongs to a DEADCLASS
+[2026.08.22-16.23.41:458][  0]LogActorComponent: RegisterComponentWithWorld: Owner belongs to a DEADCLASS
+[2026.08.22-16.23.41:458][  0]LogActorComponent: RegisterComponentWithWorld: Owner belongs to a DEADCLASS
+[2026.08.22-16.23.41:458][  0]LogActorComponent: RegisterComponentWithWorld: Owner belongs to a DEADCLASS
+[2026.08.22-16.23.41:466][  0]LogWindows: Error: appError called: Assertion failed: MetaData [File:C:\Users\BHJ\Repos\My_Portfolio\arpg-ReviseItem_Subsys\Source\ARPG\Private\Item\ItemActor\NAItemActor.cpp] [Line: 591]
+
+콜스택 (ntdll/KERNEL 프레임 제외):
+UnrealEditor-ARPG.dll!ANAItemActor::ReconstructItemSubobjectsFromMetaData_Impl() [NAItemActor.cpp:591]
+UnrealEditor-ARPG.dll!ANAItemActor::ReconstructItemSubobjectsFromMetaData()      [NAItemActor.cpp]
+UnrealEditor-ARPG.dll!ANAItemActor::OnConstruction()                              [NAItemActor.cpp:872]
+UnrealEditor-Engine.dll!AActor::ExecuteConstruction()                             [ActorConstruction.cpp:974]
+UnrealEditor-Engine.dll!AActor::RerunConstructionScripts()                        [ActorConstruction.cpp:588]
+UnrealEditor-Engine.dll!ULevel::IncrementalRunConstructionScripts()               [Level.cpp:1823]
+UnrealEditor-Engine.dll!ULevel::IncrementalUpdateComponents()                     [Level.cpp:1687]
+UnrealEditor-Engine.dll!UWorld::UpdateWorldComponents()                           [World.cpp:2636]
+UnrealEditor-UnrealEd.dll!UEditorEngine::Map_Load()                               [EditorServer.cpp:2676]
