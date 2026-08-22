@@ -171,7 +171,8 @@ const FTableRowBase* UNAItemEngineSubsystem::FindItemMetaDataImpl(UClass* ItemCl
 	if (!ItemClass->IsChildOf<ANAItemActor>()) return nullptr;
 	if (!IsSoftItemMetaDataInitialized()) return nullptr;
        
-	UClass* Key = ItemClass;
+	// REINST_/SKEL_ 클래스가 들어와도 권위 클래스(BP->GeneratedClass)로 조회
+	UClass* Key = ItemClass->GetAuthoritativeClass();
 	if (!IsItemMetaDataInitialized())
 	{
 		if (const FDataTableRowHandle* Value = SoftItemMetaData.Find(Key))
